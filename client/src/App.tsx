@@ -11,6 +11,7 @@ import ShopsPage from "./pages/ShopsPage";
 import WorkRecordsPage from "./pages/WorkRecordsPage";
 import StatsPage from "./pages/StatsPage";
 import SettingsPage from "./pages/SettingsPage";
+import { WorkersProvider } from "@/_core/hooks/useWorkers";
 
 function Router() {
   return (
@@ -18,37 +19,47 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/dashboard"}>
         {() => (
-          <DashboardLayout>
-            <Dashboard />
-          </DashboardLayout>
+          <WorkersProvider>
+            <DashboardLayout>
+              <Dashboard />
+            </DashboardLayout>
+          </WorkersProvider>
         )}
       </Route>
       <Route path={"/shops"}>
         {() => (
-          <DashboardLayout>
-            <ShopsPage />
-          </DashboardLayout>
+          <WorkersProvider>
+            <DashboardLayout>
+              <ShopsPage />
+            </DashboardLayout>
+          </WorkersProvider>
         )}
       </Route>
       <Route path={"/records"}>
         {() => (
-          <DashboardLayout>
-            <WorkRecordsPage />
-          </DashboardLayout>
+          <WorkersProvider>
+            <DashboardLayout>
+              <WorkRecordsPage />
+            </DashboardLayout>
+          </WorkersProvider>
         )}
       </Route>
       <Route path={"/stats"}>
         {() => (
-          <DashboardLayout>
-            <StatsPage />
-          </DashboardLayout>
+          <WorkersProvider>
+            <DashboardLayout>
+              <StatsPage />
+            </DashboardLayout>
+          </WorkersProvider>
         )}
       </Route>
       <Route path={"/settings"}>
         {() => (
-          <DashboardLayout>
-            <SettingsPage />
-          </DashboardLayout>
+          <WorkersProvider>
+            <DashboardLayout>
+              <SettingsPage />
+            </DashboardLayout>
+          </WorkersProvider>
         )}
       </Route>
       <Route path={"/404"} component={NotFound} />

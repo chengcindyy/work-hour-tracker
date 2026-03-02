@@ -63,10 +63,21 @@ PostgreSQL (Docker)
 
 Tables:
 users
+workers（成員／工作者，一個帳號可多個成員）
 shops
 serviceTypes
 workRecords
 notificationSettings
+
+### 若「新增成員」失敗（資料庫尚未有 workers 表）
+
+若資料庫是舊版建好的、從未跑過包含 workers 的 migration，請在專案根目錄執行：
+
+```bash
+pnpm run db:migrate-add-workers
+```
+
+會建立 `workers` 表、在 `workRecords` 加上 `workerId`，並為每位使用者建立預設成員、把既有工時掛到該成員。完成後重啟 dev server，再到設定頁新增成員即可。
 
 ## 🧭 Roadmap
 

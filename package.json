@@ -10,7 +10,9 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate"
+    "db:push": "drizzle-kit generate && drizzle-kit migrate",
+    "db:migrate-add-workers": "node scripts/run-add-workers-migration.mjs",
+    "db:migrate-add-service-types-worker": "node scripts/run-add-service-types-worker-migration.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.12",

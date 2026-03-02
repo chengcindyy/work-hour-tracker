@@ -4,6 +4,11 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import {
+  getUserWorkers,
+  createWorker,
+  updateWorker,
+  archiveWorker,
+  assertWorkerBelongsToUser,
   getUserShops,
   getShopById,
   createShop,
@@ -36,6 +41,57 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+  }),
+
+  // ============ 成員／工作者管理 ============
+  workers: router({
+    list: protectedProcedure.query(({ ctx }) => {
+      return getUserWorkers(ctx.user.id);
+    }),
+
+    create: protectedProcedure
+      .input(
+        z.object({
+          name: z.string().min(1, "成員名稱不能為空"),
+        })
+      )
+      .mutation(({ ctx, input }) => {
+        return createWorker(ctx.user.id, input.name);
+      }),
+
+    update: protectedProcedure
+      .input(
+        z.object({
+          workerId: z.number(),
+          name: z.string().min(1).optional(),
+          isActive: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+        const updates: { name?: string; isActive?: boolean } = {};
+        if (input.name !== undefined) updates.name = input.name;
+        if (input.isActive !== undefined) updates.isActive = input.isActive;
+        if (Object.keys(updates).length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "請提供要更新的欄位（name 或 isActive）",
+          });
+        }
+        return updateWorker(ctx.user.id, input.workerId, updates);
+      }),
+
+    archive: protectedProcedure
+      .input(
+        z.object({
+          workerId: z.number(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+        await archiveWorker(ctx.user.id, input.workerId);
+        return { success: true as const };
+      }),
   }),
 
   // ============ 店家管理 ============
@@ -99,14 +155,21 @@ export const appRouter = router({
   // ============ 服務類型管理 ============
   serviceTypes: router({
     listByShop: protectedProcedure
-      .input(z.object({ shopId: z.number() }))
+      .input(
+        z.object({
+          shopId: z.number(),
+          workerId: z.number(),
+        })
+      )
       .query(async ({ ctx, input }) => {
         const shop = await getShopById(input.shopId, ctx.user.id);
         if (!shop) {
           throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
         }
 
-        return getShopServiceTypes(input.shopId);
+        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+
+        return getShopServiceTypes(input.shopId, input.workerId);
       }),
 
     get: protectedProcedure
@@ -119,18 +182,27 @@ export const appRouter = router({
       .input(
         z.object({
           shopId: z.number(),
+          workerId: z.number(),
           name: z.string().min(1, "服務類型名稱不能為空"),
           hourlyPay: z.number().positive("時薪必須大於 0"),
           description: z.string().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
+        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+
         const shop = await getShopById(input.shopId, ctx.user.id);
         if (!shop) {
           throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
         }
 
-        return createServiceType(input.shopId, input.name, input.hourlyPay, input.description);
+        return createServiceType(
+          input.shopId,
+          input.workerId,
+          input.name,
+          input.hourlyPay,
+          input.description
+        );
       }),
 
     update: protectedProcedure
@@ -175,12 +247,17 @@ export const appRouter = router({
     list: protectedProcedure
       .input(
         z.object({
+          workerId: z.number().optional(),
           startDate: z.date().optional(),
           endDate: z.date().optional(),
         })
       )
-      .query(({ ctx, input }) => {
-        return getUserWorkRecords(ctx.user.id, input.startDate, input.endDate);
+      .query(async ({ ctx, input }) => {
+        const workerId = input.workerId;
+        if (workerId !== undefined) {
+          await assertWorkerBelongsToUser(workerId, ctx.user.id);
+        }
+        return getUserWorkRecords(ctx.user.id, workerId, input.startDate, input.endDate);
       }),
 
     get: protectedProcedure
@@ -192,6 +269,7 @@ export const appRouter = router({
     create: protectedProcedure
       .input(
         z.object({
+          workerId: z.number(),
           shopId: z.number(),
           serviceTypeId: z.number(),
           workDate: z.date(),
@@ -201,6 +279,8 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
+        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+
         const shop = await getShopById(input.shopId, ctx.user.id);
         if (!shop) {
           throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
@@ -215,6 +295,7 @@ export const appRouter = router({
 
         return createWorkRecord(
           ctx.user.id,
+          input.workerId,
           input.shopId,
           input.serviceTypeId,
           input.workDate,
@@ -229,6 +310,7 @@ export const appRouter = router({
       .input(
         z.object({
           recordId: z.number(),
+          workerId: z.number().optional(),
           shopId: z.number().optional(),
           serviceTypeId: z.number().optional(),
           workDate: z.date().optional(),
@@ -243,6 +325,10 @@ export const appRouter = router({
           throw new TRPCError({ code: "NOT_FOUND", message: "工時紀錄不存在" });
         }
 
+        if (input.workerId !== undefined) {
+          await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+        }
+
         let hourlyPay = parseFloat(record.hourlyPay as any);
 
         if (input.serviceTypeId) {
@@ -254,6 +340,7 @@ export const appRouter = router({
         }
 
         return updateWorkRecord(input.recordId, ctx.user.id, {
+          workerId: input.workerId,
           shopId: input.shopId,
           serviceTypeId: input.serviceTypeId,
           workDate: input.workDate,
@@ -282,12 +369,13 @@ export const appRouter = router({
     monthlyStats: protectedProcedure
       .input(
         z.object({
+          workerId: z.number().optional(),
           year: z.number(),
           month: z.number().min(1).max(12),
         })
       )
       .query(({ ctx, input }) => {
-        return getMonthlyStats(ctx.user.id, input.year, input.month);
+        return getMonthlyStats(ctx.user.id, input.year, input.month, input.workerId);
       }),
   }),
 

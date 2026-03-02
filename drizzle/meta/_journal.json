@@ -8,6 +8,20 @@
       "when": 1772268278731,
       "tag": "0000_tidy_doctor_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772433705664,
+      "tag": "0001_add_workers",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772435933060,
+      "tag": "0002_add_service_types_worker",
+      "breakpoints": true
     }
   ]
 }

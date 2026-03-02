@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useWorkerSelection } from "@/_core/hooks/useWorkers";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,10 +18,12 @@ export default function StatsPage() {
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear().toString());
   const [selectedMonth, setSelectedMonth] = useState((now.getMonth() + 1).toString());
+  const { selectedWorkerId } = useWorkerSelection();
 
   const { data: stats } = trpc.stats.monthlyStats.useQuery({
     year: parseInt(selectedYear),
     month: parseInt(selectedMonth),
+    workerId: selectedWorkerId ?? undefined,
   });
 
   const formatCurrency = (value: number) => {

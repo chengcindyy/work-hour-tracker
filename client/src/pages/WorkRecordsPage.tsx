@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useWorkerSelection } from "@/_core/hooks/useWorkers";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -34,11 +35,28 @@ export default function WorkRecordsPage() {
     notes: "",
   });
 
+  const { selectedWorkerId } = useWorkerSelection();
+
   const { data: shops } = trpc.shops.list.useQuery();
-  const { data: workRecords, isLoading } = trpc.workRecords.list.useQuery({});
+  const { data: workRecords, isLoading } = trpc.workRecords.list.useQuery(
+    {
+      workerId: selectedWorkerId ?? undefined,
+    },
+    {
+      enabled: selectedWorkerId != null,
+    }
+  );
   const { data: serviceTypes } = trpc.serviceTypes.listByShop.useQuery(
-    { shopId: parseInt(selectedShopId) },
-    { enabled: !!selectedShopId }
+    selectedShopId && selectedWorkerId != null
+      ? {
+          shopId: parseInt(selectedShopId),
+          workerId: selectedWorkerId,
+        }
+      : // skipToken 由 tRPC 型別推導提供，用於條件式查詢
+        (undefined as any),
+    {
+      enabled: !!selectedShopId && selectedWorkerId != null,
+    }
   );
 
   const parseDateFromInput = (value: string) => {
@@ -97,6 +115,10 @@ export default function WorkRecordsPage() {
   const hasMultipleServiceTypes = (serviceTypes?.length ?? 0) >= 2;
 
   const handleSubmit = async () => {
+    if (!selectedWorkerId) {
+      toast.error("請先在右上角選擇成員後再新增工時");
+      return;
+    }
     if (!selectedShopId || !formData.hours) {
       toast.error("請填寫所有必填項目");
       return;
@@ -121,6 +143,7 @@ export default function WorkRecordsPage() {
       if (editingRecord) {
         await updateRecordMutation.mutateAsync({
           recordId: editingRecord.id,
+          workerId: selectedWorkerId,
           shopId: parseInt(selectedShopId),
           serviceTypeId: parseInt(selectedServiceTypeId),
           workDate: parseDateFromInput(formData.workDate),
@@ -131,6 +154,7 @@ export default function WorkRecordsPage() {
         toast.success("工時紀錄已更新");
       } else {
         await createRecordMutation.mutateAsync({
+          workerId: selectedWorkerId,
           shopId: parseInt(selectedShopId),
           serviceTypeId: parseInt(selectedServiceTypeId),
           workDate: parseDateFromInput(formData.workDate),

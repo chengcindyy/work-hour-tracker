@@ -1,17 +1,19 @@
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { 
-  InsertUser, 
-  users, 
-  shops, 
-  serviceTypes, 
+import {
+  InsertUser,
+  users,
+  shops,
+  serviceTypes,
   workRecords,
   notificationSettings,
+  workers,
   type Shop,
   type ServiceType,
   type WorkRecord,
   type NotificationSetting,
+  type Worker,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -116,6 +118,99 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+// ============ 成員／工作者相關查詢 ============
+
+export async function getUserWorkers(userId: number): Promise<Worker[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(workers)
+    .where(and(eq(workers.ownerUserId, userId), eq(workers.isActive, true)));
+}
+
+export async function createWorker(userId: number, name: string): Promise<Worker> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db
+    .insert(workers)
+    .values({
+      ownerUserId: userId,
+      name,
+    })
+    .returning();
+
+  if (!result[0]) throw new Error("Failed to create worker");
+
+  return result[0];
+}
+
+export async function updateWorker(
+  userId: number,
+  workerId: number,
+  updates: { name?: string; isActive?: boolean }
+): Promise<Worker> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const setValues = Object.fromEntries(
+    Object.entries(updates).filter(([, v]) => v !== undefined)
+  ) as { name?: string; isActive?: boolean };
+  if (Object.keys(setValues).length === 0) {
+    throw new Error("No valid fields to update");
+  }
+
+  const result = await db
+    .update(workers)
+    .set(setValues)
+    .where(and(eq(workers.id, workerId), eq(workers.ownerUserId, userId)))
+    .returning();
+
+  if (!result[0]) throw new Error("Failed to update worker");
+
+  return result[0];
+}
+
+export async function archiveWorker(userId: number, workerId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(workers)
+    .set({ isActive: false })
+    .where(and(eq(workers.id, workerId), eq(workers.ownerUserId, userId)));
+}
+
+export async function assertWorkerBelongsToUser(
+  workerId: number,
+  userId: number
+): Promise<Worker> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const result = await db
+    .select()
+    .from(workers)
+    .where(
+      and(
+        eq(workers.id, workerId),
+        eq(workers.ownerUserId, userId),
+        eq(workers.isActive, true)
+      )
+    )
+    .limit(1);
+
+  if (!result[0]) {
+    throw new Error("Worker not found or does not belong to user");
+  }
+
+  return result[0];
+}
+
 // ============ 店家相關查詢 ============
 
 export async function getUserShops(userId: number): Promise<Shop[]> {
@@ -182,11 +277,19 @@ export async function deleteShop(shopId: number, userId: number): Promise<void> 
 
 // ============ 服務類型相關查詢 ============
 
-export async function getShopServiceTypes(shopId: number): Promise<ServiceType[]> {
+export async function getShopServiceTypes(
+  shopId: number,
+  workerId?: number
+): Promise<ServiceType[]> {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(serviceTypes).where(eq(serviceTypes.shopId, shopId));
+
+  const conditions: any[] = [eq(serviceTypes.shopId, shopId)];
+  if (workerId !== undefined) {
+    conditions.push(eq(serviceTypes.workerId, workerId));
+  }
+
+  return db.select().from(serviceTypes).where(and(...conditions));
 }
 
 export async function getServiceTypeById(serviceTypeId: number): Promise<ServiceType | undefined> {
@@ -202,7 +305,13 @@ export async function getServiceTypeById(serviceTypeId: number): Promise<Service
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function createServiceType(shopId: number, name: string, hourlyPay: number, description?: string): Promise<ServiceType> {
+export async function createServiceType(
+  shopId: number,
+  workerId: number,
+  name: string,
+  hourlyPay: number,
+  description?: string
+): Promise<ServiceType> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
@@ -210,6 +319,7 @@ export async function createServiceType(shopId: number, name: string, hourlyPay:
     .insert(serviceTypes)
     .values({
       shopId,
+      workerId,
       name,
       hourlyPay: hourlyPay.toString(),
       description,
@@ -250,19 +360,28 @@ export async function deleteServiceType(serviceTypeId: number): Promise<void> {
 
 // ============ 工時紀錄相關查詢 ============
 
-export async function getUserWorkRecords(userId: number, startDate?: Date, endDate?: Date): Promise<WorkRecord[]> {
+export async function getUserWorkRecords(
+  userId: number,
+  workerId?: number,
+  startDate?: Date,
+  endDate?: Date
+): Promise<WorkRecord[]> {
   const db = await getDb();
   if (!db) return [];
-  
+
   const conditions: any[] = [eq(workRecords.userId, userId)];
-  
+
+  if (workerId !== undefined) {
+    conditions.push(eq(workRecords.workerId, workerId));
+  }
+
   if (startDate) {
     conditions.push(gte(workRecords.workDate, formatDateForDb(startDate)));
   }
   if (endDate) {
     conditions.push(lte(workRecords.workDate, formatDateForDb(endDate)));
   }
-  
+
   return db
     .select()
     .from(workRecords)
@@ -285,6 +404,7 @@ export async function getWorkRecordById(recordId: number, userId: number): Promi
 
 export async function createWorkRecord(
   userId: number,
+  workerId: number,
   shopId: number,
   serviceTypeId: number,
   workDate: Date,
@@ -295,13 +415,14 @@ export async function createWorkRecord(
 ): Promise<WorkRecord> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
   const totalEarnings = hours * hourlyPay + tips;
-  
+
   const result = await db
     .insert(workRecords)
     .values({
       userId,
+      workerId,
       shopId,
       serviceTypeId,
       workDate: formatDateForDb(workDate),
@@ -324,6 +445,7 @@ export async function updateWorkRecord(
   updates: {
     shopId?: number;
     serviceTypeId?: number;
+    workerId?: number;
     workDate?: Date;
     hours?: number;
     tips?: number;
@@ -333,28 +455,32 @@ export async function updateWorkRecord(
 ): Promise<WorkRecord> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
   const updateData: any = { ...updates };
-  
+
+  if (updates.workerId !== undefined) {
+    updateData.workerId = updates.workerId;
+  }
+
   if (updates.workDate !== undefined) {
     updateData.workDate = formatDateForDb(updates.workDate);
   }
-  
+
   if (updates.hours !== undefined || updates.tips !== undefined || updates.hourlyPay !== undefined) {
     const record = await getWorkRecordById(recordId, userId);
     if (!record) throw new Error("Work record not found");
-    
+
     const hours = updates.hours ?? parseFloat(record.hours as any);
     const tips = updates.tips ?? parseFloat(record.tips as any);
     const hourlyPay = updates.hourlyPay ?? parseFloat(record.hourlyPay as any);
-    
+
     updateData.totalEarnings = (hours * hourlyPay + tips).toString();
-    
+
     if (updates.hours !== undefined) updateData.hours = updates.hours.toString();
     if (updates.tips !== undefined) updateData.tips = updates.tips.toString();
     if (updates.hourlyPay !== undefined) updateData.hourlyPay = updates.hourlyPay.toString();
   }
-  
+
   const result = await db
     .update(workRecords)
     .set(updateData)
@@ -377,15 +503,20 @@ export async function deleteWorkRecord(recordId: number, userId: number): Promis
 
 // ============ 統計相關查詢 ============
 
-export async function getMonthlyStats(userId: number, year: number, month: number) {
+export async function getMonthlyStats(
+  userId: number,
+  year: number,
+  month: number,
+  workerId?: number
+) {
   const db = await getDb();
   if (!db) return null;
-  
+
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 0);
-  
-  const records = await getUserWorkRecords(userId, startDate, endDate);
-  
+
+  const records = await getUserWorkRecords(userId, workerId, startDate, endDate);
+
   const stats = {
     totalHours: 0,
     totalEarnings: 0,

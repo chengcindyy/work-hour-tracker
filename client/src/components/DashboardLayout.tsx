@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useWorkerSelection } from "@/_core/hooks/useWorkers";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -26,6 +27,13 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -110,6 +118,8 @@ function DashboardLayoutContent({
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
+  const { workers, selectedWorkerId, setSelectedWorkerId, isLoading: workersLoading } =
+    useWorkerSelection();
   const [location] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
@@ -262,6 +272,49 @@ function DashboardLayoutContent({
             </div>
           </div>
         )}
+
+        {/* 成員選擇列 */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-3">
+          <div className="flex flex-col">
+            <span className="text-xs text-muted-foreground uppercase tracking-wide">
+              目前成員
+            </span>
+            <span className="text-sm text-foreground font-medium">
+              {workersLoading
+                ? "載入中..."
+                : workers.length === 0
+                ? "尚未建立成員"
+                : workers.find(w => w.id === selectedWorkerId)?.name ?? "未選擇"}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select
+              value={selectedWorkerId != null ? String(selectedWorkerId) : undefined}
+              onValueChange={value => {
+                const id = parseInt(value, 10);
+                if (!Number.isNaN(id)) {
+                  setSelectedWorkerId(id);
+                }
+              }}
+              disabled={workersLoading || workers.length === 0}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder={workersLoading ? "載入中..." : "選擇成員"} />
+              </SelectTrigger>
+              <SelectContent>
+                {workers.map(worker => (
+                  <SelectItem key={worker.id} value={String(worker.id)}>
+                    {worker.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/settings">成員管理</Link>
+            </Button>
+          </div>
+        </div>
+
         <main className="flex-1 p-4">{children}</main>
       </SidebarInset>
     </>

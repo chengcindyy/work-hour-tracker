@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useWorkerSelection } from "@/_core/hooks/useWorkers";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -25,7 +26,9 @@ export default function ShopsPage() {
     hourlyPay: "",
     description: "",
   });
+  const [editingServiceTypeId, setEditingServiceTypeId] = useState<number | null>(null);
 
+  const { selectedWorkerId } = useWorkerSelection();
   const { data: shops, isLoading } = trpc.shops.list.useQuery();
   const createShopMutation = trpc.shops.create.useMutation();
   const updateShopMutation = trpc.shops.update.useMutation();
@@ -33,10 +36,16 @@ export default function ShopsPage() {
   const utils = trpc.useUtils();
 
   const { data: serviceTypes } = trpc.serviceTypes.listByShop.useQuery(
-    { shopId: ratesDialogShopId! },
-    { enabled: !!ratesDialogShopId }
+    ratesDialogShopId && selectedWorkerId != null
+      ? {
+          shopId: ratesDialogShopId,
+          workerId: selectedWorkerId,
+        }
+      : (undefined as any),
+    { enabled: !!ratesDialogShopId && selectedWorkerId != null }
   );
   const createServiceTypeMutation = trpc.serviceTypes.create.useMutation();
+  const updateServiceTypeMutation = trpc.serviceTypes.update.useMutation();
 
   const handleOpenDialog = (shop?: any) => {
     if (shop) {
@@ -96,17 +105,27 @@ export default function ShopsPage() {
   };
 
   const handleOpenRatesDialog = (shopId: number) => {
+    if (!selectedWorkerId) {
+      toast.error("請先在右上角選擇要設定時薪的成員");
+      return;
+    }
     setRatesDialogShopId(shopId);
     setRatesFormData({ name: "", hourlyPay: "", description: "" });
+    setEditingServiceTypeId(null);
   };
 
   const handleCloseRatesDialog = () => {
     setRatesDialogShopId(null);
     setRatesFormData({ name: "", hourlyPay: "", description: "" });
+    setEditingServiceTypeId(null);
   };
 
-  const handleCreateServiceType = async () => {
+  const handleSaveServiceType = async () => {
     if (!ratesDialogShopId) return;
+    if (!selectedWorkerId) {
+      toast.error("請先在右上角選擇成員");
+      return;
+    }
     if (!ratesFormData.name.trim()) {
       toast.error("請輸入服務類型名稱");
       return;
@@ -118,17 +137,36 @@ export default function ShopsPage() {
     }
 
     try {
-      await createServiceTypeMutation.mutateAsync({
+      if (editingServiceTypeId) {
+        // 更新既有服務類型
+        await updateServiceTypeMutation.mutateAsync({
+          serviceTypeId: editingServiceTypeId,
+          name: ratesFormData.name.trim(),
+          hourlyPay,
+          description: ratesFormData.description.trim() || undefined,
+        });
+        toast.success("服務類型已更新");
+      } else {
+        // 新增新的服務類型
+        await createServiceTypeMutation.mutateAsync({
+          shopId: ratesDialogShopId,
+          workerId: selectedWorkerId,
+          name: ratesFormData.name.trim(),
+          hourlyPay,
+          description: ratesFormData.description.trim() || undefined,
+        });
+        toast.success("服務類型已新增");
+      }
+
+      await utils.serviceTypes.listByShop.invalidate({
         shopId: ratesDialogShopId,
-        name: ratesFormData.name.trim(),
-        hourlyPay,
-        description: ratesFormData.description.trim() || undefined,
+        workerId: selectedWorkerId,
       });
-      toast.success("服務類型已新增");
-      utils.serviceTypes.listByShop.invalidate({ shopId: ratesDialogShopId });
+
       setRatesFormData({ name: "", hourlyPay: "", description: "" });
-    } catch (error) {
-      toast.error("新增失敗，請重試");
+      setEditingServiceTypeId(null);
+    } catch {
+      toast.error("儲存失敗，請重試");
     }
   };
 
@@ -272,7 +310,9 @@ export default function ShopsPage() {
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={createShopMutation.isPending || updateShopMutation.isPending}
+                disabled={
+                  createShopMutation.isPending || updateShopMutation.isPending
+                }
                 className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {editingShop ? "更新" : "新增"}
@@ -306,9 +346,19 @@ export default function ShopsPage() {
                   {serviceTypes.map((st) => (
                     <li
                       key={st.id}
-                      className="flex justify-between items-center text-sm"
+                      className="flex justify-between items-center text-sm cursor-pointer hover:bg-muted/60 rounded px-2 py-1"
+                      onClick={() => {
+                        setEditingServiceTypeId(st.id);
+                        setRatesFormData({
+                          name: st.name,
+                          hourlyPay: parseFloat(st.hourlyPay as any).toString(),
+                          description: st.description || "",
+                        });
+                      }}
                     >
-                      <span className="font-medium text-foreground">{st.name}</span>
+                      <span className="font-medium text-foreground">
+                        {st.name}
+                      </span>
                       <span className="text-muted-foreground">
                         {formatCurrency(parseFloat(st.hourlyPay as string))}/小時
                       </span>
@@ -320,9 +370,11 @@ export default function ShopsPage() {
               )}
             </div>
 
-            {/* 新增服務類型表單 */}
+            {/* 新增 / 編輯 服務類型表單 */}
             <div className="form-group">
-              <label className="form-label">新增服務類型</label>
+              <label className="form-label">
+                {editingServiceTypeId ? "編輯服務類型" : "新增服務類型"}
+              </label>
               <div className="space-y-3">
                 <Input
                   placeholder="服務類型名稱 *"
@@ -338,23 +390,38 @@ export default function ShopsPage() {
                   placeholder="時薪 *"
                   value={ratesFormData.hourlyPay}
                   onChange={(e) =>
-                    setRatesFormData({ ...ratesFormData, hourlyPay: e.target.value })
+                    setRatesFormData({
+                      ...ratesFormData,
+                      hourlyPay: e.target.value,
+                    })
                   }
                 />
                 <Textarea
                   placeholder="描述（選填）"
                   value={ratesFormData.description}
                   onChange={(e) =>
-                    setRatesFormData({ ...ratesFormData, description: e.target.value })
+                    setRatesFormData({
+                      ...ratesFormData,
+                      description: e.target.value,
+                    })
                   }
                   rows={2}
                 />
                 <Button
-                  onClick={handleCreateServiceType}
-                  disabled={createServiceTypeMutation.isPending}
+                  onClick={handleSaveServiceType}
+                  disabled={
+                    createServiceTypeMutation.isPending ||
+                    updateServiceTypeMutation.isPending
+                  }
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {createServiceTypeMutation.isPending ? "新增中..." : "新增服務類型"}
+                  {editingServiceTypeId
+                    ? updateServiceTypeMutation.isPending
+                      ? "更新中..."
+                      : "更新服務類型"
+                    : createServiceTypeMutation.isPending
+                    ? "新增中..."
+                    : "新增服務類型"}
                 </Button>
               </div>
             </div>

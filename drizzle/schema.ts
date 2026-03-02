@@ -1,5 +1,6 @@
 import {
   serial,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -28,6 +29,23 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 /**
+ * 成員／工作者表：一個登入使用者底下可以有多個成員
+ */
+export const workers = pgTable("workers", {
+  id: serial("id").primaryKey(),
+  ownerUserId: integer("ownerUserId")
+    .notNull()
+    .references(() => users.id),
+  name: varchar("name", { length: 255 }).notNull(), // 成員名稱（例如：自己、先生）
+  isActive: boolean("isActive").default(true).notNull(), // 是否啟用
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type Worker = typeof workers.$inferSelect;
+export type InsertWorker = typeof workers.$inferInsert;
+
+/**
  * 店家表：存儲用戶的多家店舖信息
  */
 export const shops = pgTable("shops", {
@@ -49,6 +67,9 @@ export type InsertShop = typeof shops.$inferInsert;
 export const serviceTypes = pgTable("serviceTypes", {
   id: serial("id").primaryKey(),
   shopId: serial("shopId").notNull(), // 外鍵，關聯到 shops 表
+  workerId: integer("workerId")
+    .notNull()
+    .references(() => workers.id), // 外鍵，關聯到 workers 表（成員）
   name: varchar("name", { length: 255 }).notNull(), // 服務類型名稱（如：做腳、做身體）
   hourlyPay: numeric("hourlyPay", { precision: 10, scale: 2 }).notNull(), // 時薪
   description: text("description"), // 服務描述
@@ -65,7 +86,10 @@ export type InsertServiceType = typeof serviceTypes.$inferInsert;
  */
 export const workRecords = pgTable("workRecords", {
   id: serial("id").primaryKey(),
-  userId: serial("userId").notNull(), // 外鍵，關聯到 users 表
+  userId: serial("userId").notNull(), // 外鍵，關聯到 users 表（資料擁有者）
+  workerId: integer("workerId")
+    .notNull()
+    .references(() => workers.id), // 外鍵，關聯到 workers 表（實際工作者）
   shopId: serial("shopId").notNull(), // 外鍵，關聯到 shops 表
   serviceTypeId: serial("serviceTypeId").notNull(), // 外鍵，關聯到 serviceTypes 表
   workDate: date("workDate").notNull(), // 工作日期

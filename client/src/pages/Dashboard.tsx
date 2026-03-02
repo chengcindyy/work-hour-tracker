@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useWorkerSelection } from "@/_core/hooks/useWorkers";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,20 +11,27 @@ import { zhTW } from "date-fns/locale";
 export default function Dashboard() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
+  const { selectedWorkerId } = useWorkerSelection();
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
-  const { data: monthlyStats, isLoading: statsLoading } = trpc.stats.monthlyStats.useQuery({
-    year: currentYear,
-    month: currentMonth,
-  });
+  const { data: monthlyStats, isLoading: statsLoading } = trpc.stats.monthlyStats.useQuery(
+    {
+      year: currentYear,
+      month: currentMonth,
+      workerId: selectedWorkerId ?? undefined,
+    }
+  );
 
-  const { data: recentRecords, isLoading: recordsLoading } = trpc.workRecords.list.useQuery({
-    startDate: new Date(currentYear, currentMonth - 1, 1),
-    endDate: new Date(currentYear, currentMonth, 0),
-  });
+  const { data: recentRecords, isLoading: recordsLoading } = trpc.workRecords.list.useQuery(
+    {
+      workerId: selectedWorkerId ?? undefined,
+      startDate: new Date(currentYear, currentMonth - 1, 1),
+      endDate: new Date(currentYear, currentMonth, 0),
+    }
+  );
 
   const { data: shops } = trpc.shops.list.useQuery();
 
