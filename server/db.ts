@@ -18,6 +18,13 @@ import { ENV } from './_core/env';
 let _db: ReturnType<typeof drizzle> | null = null;
 let _pool: Pool | null = null;
 
+function formatDateForDb(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -250,10 +257,10 @@ export async function getUserWorkRecords(userId: number, startDate?: Date, endDa
   const conditions: any[] = [eq(workRecords.userId, userId)];
   
   if (startDate) {
-    conditions.push(gte(workRecords.workDate, startDate.toISOString().split('T')[0]));
+    conditions.push(gte(workRecords.workDate, formatDateForDb(startDate)));
   }
   if (endDate) {
-    conditions.push(lte(workRecords.workDate, endDate.toISOString().split('T')[0]));
+    conditions.push(lte(workRecords.workDate, formatDateForDb(endDate)));
   }
   
   return db
@@ -297,7 +304,7 @@ export async function createWorkRecord(
       userId,
       shopId,
       serviceTypeId,
-      workDate: workDate.toISOString().split('T')[0],
+      workDate: formatDateForDb(workDate),
       hours: hours.toString(),
       tips: tips.toString(),
       hourlyPay: hourlyPay.toString(),
@@ -330,7 +337,7 @@ export async function updateWorkRecord(
   const updateData: any = { ...updates };
   
   if (updates.workDate !== undefined) {
-    updateData.workDate = updates.workDate.toISOString().split('T')[0];
+    updateData.workDate = formatDateForDb(updates.workDate);
   }
   
   if (updates.hours !== undefined || updates.tips !== undefined || updates.hourlyPay !== undefined) {

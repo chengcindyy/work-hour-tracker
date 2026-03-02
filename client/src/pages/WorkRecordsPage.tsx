@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -41,6 +41,11 @@ export default function WorkRecordsPage() {
     { enabled: !!selectedShopId }
   );
 
+  const parseDateFromInput = (value: string) => {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day, 12, 0, 0);
+  };
+
   const createRecordMutation = trpc.workRecords.create.useMutation();
   const updateRecordMutation = trpc.workRecords.update.useMutation();
   const deleteRecordMutation = trpc.workRecords.delete.useMutation();
@@ -52,14 +57,16 @@ export default function WorkRecordsPage() {
       setSelectedShopId(record.shopId.toString());
       setSelectedServiceTypeId(record.serviceTypeId.toString());
       setFormData({
-        workDate: format(new Date(record.workDate), "yyyy-MM-dd"),
+        workDate: (record.workDate as string) || format(new Date(), "yyyy-MM-dd"),
         hours: parseFloat(record.hours as any).toString(),
         tips: parseFloat(record.tips as any).toString(),
         notes: record.notes || "",
       });
     } else {
       setEditingRecord(null);
-      setSelectedShopId("");
+      const defaultShopId =
+        shops && shops.length > 0 ? shops[0].id.toString() : "";
+      setSelectedShopId(defaultShopId);
       setSelectedServiceTypeId("");
       setFormData({
         workDate: format(new Date(), "yyyy-MM-dd"),
@@ -78,8 +85,31 @@ export default function WorkRecordsPage() {
     setSelectedServiceTypeId("");
   };
 
+  useEffect(() => {
+    if (serviceTypes?.length === 1) {
+      setSelectedServiceTypeId(serviceTypes[0].id.toString());
+    }
+  }, [serviceTypes]);
+
+  const hasNoServiceTypes =
+    !!selectedShopId && serviceTypes && serviceTypes.length === 0;
+  const hasOneServiceType = serviceTypes?.length === 1;
+  const hasMultipleServiceTypes = (serviceTypes?.length ?? 0) >= 2;
+
   const handleSubmit = async () => {
-    if (!selectedShopId || !selectedServiceTypeId || !formData.hours) {
+    if (!selectedShopId || !formData.hours) {
+      toast.error("請填寫所有必填項目");
+      return;
+    }
+    if (hasNoServiceTypes) {
+      toast.error("所選店家尚無服務類型，無法新增工時");
+      return;
+    }
+    if (hasMultipleServiceTypes && !selectedServiceTypeId) {
+      toast.error("請選擇服務類型");
+      return;
+    }
+    if (!selectedServiceTypeId) {
       toast.error("請填寫所有必填項目");
       return;
     }
@@ -93,7 +123,7 @@ export default function WorkRecordsPage() {
           recordId: editingRecord.id,
           shopId: parseInt(selectedShopId),
           serviceTypeId: parseInt(selectedServiceTypeId),
-          workDate: new Date(formData.workDate),
+          workDate: parseDateFromInput(formData.workDate),
           hours,
           tips,
           notes: formData.notes,
@@ -103,7 +133,7 @@ export default function WorkRecordsPage() {
         await createRecordMutation.mutateAsync({
           shopId: parseInt(selectedShopId),
           serviceTypeId: parseInt(selectedServiceTypeId),
-          workDate: new Date(formData.workDate),
+          workDate: parseDateFromInput(formData.workDate),
           hours,
           tips,
           notes: formData.notes,
@@ -173,7 +203,7 @@ export default function WorkRecordsPage() {
                       {shop?.name}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {format(new Date(record.workDate), "yyyy-MM-dd")} • {serviceType?.name}
+                  {(record.workDate as string) || ""} • {serviceType?.name}
                     </div>
                     <div className="text-sm text-muted-foreground mt-1">
                       {parseFloat(record.hours as any).toFixed(1)} 小時 × {formatCurrency(parseFloat(record.hourlyPay as any))}
@@ -244,7 +274,13 @@ export default function WorkRecordsPage() {
           <div className="space-y-4">
             <div className="form-group">
               <label className="form-label">店家 *</label>
-              <Select value={selectedShopId} onValueChange={setSelectedShopId}>
+              <Select
+                value={selectedShopId}
+                onValueChange={(value) => {
+                  setSelectedShopId(value);
+                  setSelectedServiceTypeId("");
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="選擇店家" />
                 </SelectTrigger>
@@ -259,23 +295,39 @@ export default function WorkRecordsPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">服務類型 *</label>
-              <Select
-                value={selectedServiceTypeId}
-                onValueChange={setSelectedServiceTypeId}
-                disabled={!selectedShopId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="選擇服務類型" />
-                </SelectTrigger>
-                <SelectContent>
-                  {serviceTypes?.map((st) => (
-                    <SelectItem key={st.id} value={st.id.toString()}>
-                      {st.name} - {formatCurrency(parseFloat(st.hourlyPay as any))}/小時
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <label className="form-label">
+                服務類型{hasMultipleServiceTypes ? " *" : ""}
+              </label>
+              {hasNoServiceTypes && (
+                <p className="text-sm text-destructive mt-1">
+                  所選店家尚無服務類型，無法新增工時
+                </p>
+              )}
+              {hasOneServiceType && serviceTypes && (
+                <p className="text-sm text-muted-foreground py-2 px-3 rounded-md border border-input bg-muted/30">
+                  {serviceTypes[0].name} -{" "}
+                  {formatCurrency(parseFloat(serviceTypes[0].hourlyPay as any))}
+                  /小時
+                </p>
+              )}
+              {hasMultipleServiceTypes && (
+                <Select
+                  value={selectedServiceTypeId}
+                  onValueChange={setSelectedServiceTypeId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="選擇服務類型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {serviceTypes?.map((st) => (
+                      <SelectItem key={st.id} value={st.id.toString()}>
+                        {st.name} -{" "}
+                        {formatCurrency(parseFloat(st.hourlyPay as any))}/小時
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className="form-group">
@@ -340,7 +392,9 @@ export default function WorkRecordsPage() {
               <Button
                 onClick={handleSubmit}
                 disabled={
-                  createRecordMutation.isPending || updateRecordMutation.isPending
+                  createRecordMutation.isPending ||
+                  updateRecordMutation.isPending ||
+                  hasNoServiceTypes
                 }
                 className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
               >

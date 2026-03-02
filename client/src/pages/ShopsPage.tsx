@@ -12,18 +12,31 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Edit2, Trash2, Plus, Store } from "lucide-react";
+import { Edit2, Trash2, Plus, Store, DollarSign } from "lucide-react";
 
 export default function ShopsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingShop, setEditingShop] = useState<any>(null);
   const [formData, setFormData] = useState({ name: "", description: "" });
 
+  const [ratesDialogShopId, setRatesDialogShopId] = useState<number | null>(null);
+  const [ratesFormData, setRatesFormData] = useState({
+    name: "",
+    hourlyPay: "",
+    description: "",
+  });
+
   const { data: shops, isLoading } = trpc.shops.list.useQuery();
   const createShopMutation = trpc.shops.create.useMutation();
   const updateShopMutation = trpc.shops.update.useMutation();
   const deleteShopMutation = trpc.shops.delete.useMutation();
   const utils = trpc.useUtils();
+
+  const { data: serviceTypes } = trpc.serviceTypes.listByShop.useQuery(
+    { shopId: ratesDialogShopId! },
+    { enabled: !!ratesDialogShopId }
+  );
+  const createServiceTypeMutation = trpc.serviceTypes.create.useMutation();
 
   const handleOpenDialog = (shop?: any) => {
     if (shop) {
@@ -82,6 +95,50 @@ export default function ShopsPage() {
     }
   };
 
+  const handleOpenRatesDialog = (shopId: number) => {
+    setRatesDialogShopId(shopId);
+    setRatesFormData({ name: "", hourlyPay: "", description: "" });
+  };
+
+  const handleCloseRatesDialog = () => {
+    setRatesDialogShopId(null);
+    setRatesFormData({ name: "", hourlyPay: "", description: "" });
+  };
+
+  const handleCreateServiceType = async () => {
+    if (!ratesDialogShopId) return;
+    if (!ratesFormData.name.trim()) {
+      toast.error("請輸入服務類型名稱");
+      return;
+    }
+    const hourlyPay = parseFloat(ratesFormData.hourlyPay);
+    if (isNaN(hourlyPay) || hourlyPay <= 0) {
+      toast.error("請輸入有效的時薪（大於 0）");
+      return;
+    }
+
+    try {
+      await createServiceTypeMutation.mutateAsync({
+        shopId: ratesDialogShopId,
+        name: ratesFormData.name.trim(),
+        hourlyPay,
+        description: ratesFormData.description.trim() || undefined,
+      });
+      toast.success("服務類型已新增");
+      utils.serviceTypes.listByShop.invalidate({ shopId: ratesDialogShopId });
+      setRatesFormData({ name: "", hourlyPay: "", description: "" });
+    } catch (error) {
+      toast.error("新增失敗，請重試");
+    }
+  };
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat("zh-TW", {
+      style: "currency",
+      currency: "TWD",
+      minimumFractionDigits: 0,
+    }).format(value);
+
   return (
     <div className="space-y-6">
       {/* 標題和按鈕 */}
@@ -120,6 +177,15 @@ export default function ShopsPage() {
               </div>
 
               <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleOpenRatesDialog(shop.id)}
+                  className="flex-1"
+                >
+                  <DollarSign className="w-4 h-4 mr-1" />
+                  時薪設定
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -211,6 +277,86 @@ export default function ShopsPage() {
               >
                 {editingShop ? "更新" : "新增"}
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 時薪設定對話框 */}
+      <Dialog
+        open={!!ratesDialogShopId}
+        onOpenChange={(open) => !open && handleCloseRatesDialog()}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              時薪設定 - {shops?.find((s) => s.id === ratesDialogShopId)?.name ?? ""}
+            </DialogTitle>
+            <DialogDescription>
+              管理此店家的服務類型與時薪
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* 現有服務類型列表 */}
+            <div className="form-group">
+              <label className="form-label">現有服務類型</label>
+              {serviceTypes && serviceTypes.length > 0 ? (
+                <ul className="rounded-md border border-input bg-muted/30 p-3 space-y-2">
+                  {serviceTypes.map((st) => (
+                    <li
+                      key={st.id}
+                      className="flex justify-between items-center text-sm"
+                    >
+                      <span className="font-medium text-foreground">{st.name}</span>
+                      <span className="text-muted-foreground">
+                        {formatCurrency(parseFloat(st.hourlyPay as string))}/小時
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground py-2">尚無服務類型</p>
+              )}
+            </div>
+
+            {/* 新增服務類型表單 */}
+            <div className="form-group">
+              <label className="form-label">新增服務類型</label>
+              <div className="space-y-3">
+                <Input
+                  placeholder="服務類型名稱 *"
+                  value={ratesFormData.name}
+                  onChange={(e) =>
+                    setRatesFormData({ ...ratesFormData, name: e.target.value })
+                  }
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="時薪 *"
+                  value={ratesFormData.hourlyPay}
+                  onChange={(e) =>
+                    setRatesFormData({ ...ratesFormData, hourlyPay: e.target.value })
+                  }
+                />
+                <Textarea
+                  placeholder="描述（選填）"
+                  value={ratesFormData.description}
+                  onChange={(e) =>
+                    setRatesFormData({ ...ratesFormData, description: e.target.value })
+                  }
+                  rows={2}
+                />
+                <Button
+                  onClick={handleCreateServiceType}
+                  disabled={createServiceTypeMutation.isPending}
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {createServiceTypeMutation.isPending ? "新增中..." : "新增服務類型"}
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>
