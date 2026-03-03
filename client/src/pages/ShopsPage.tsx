@@ -29,7 +29,10 @@ export default function ShopsPage() {
   const [editingServiceTypeId, setEditingServiceTypeId] = useState<number | null>(null);
 
   const { selectedWorkerId } = useWorkerSelection();
-  const { data: shops, isLoading } = trpc.shops.list.useQuery();
+  const { data: shops, isLoading } = trpc.shops.list.useQuery(
+    { workerId: selectedWorkerId! },
+    { enabled: selectedWorkerId != null }
+  );
   const createShopMutation = trpc.shops.create.useMutation();
   const updateShopMutation = trpc.shops.update.useMutation();
   const deleteShopMutation = trpc.shops.delete.useMutation();
@@ -69,17 +72,22 @@ export default function ShopsPage() {
       toast.error("請輸入店家名稱");
       return;
     }
-
+    if (selectedWorkerId == null) {
+      toast.error("請先選擇成員");
+      return;
+    }
     try {
       if (editingShop) {
         await updateShopMutation.mutateAsync({
           shopId: editingShop.id,
+          workerId: selectedWorkerId,
           name: formData.name,
           description: formData.description,
         });
         toast.success("店家已更新");
       } else {
         await createShopMutation.mutateAsync({
+          workerId: selectedWorkerId,
           name: formData.name,
           description: formData.description,
         });
@@ -93,9 +101,10 @@ export default function ShopsPage() {
   };
 
   const handleDelete = async (shopId: number) => {
+    if (selectedWorkerId == null) return;
     if (confirm("確定要刪除此店家嗎？")) {
       try {
-        await deleteShopMutation.mutateAsync({ shopId });
+        await deleteShopMutation.mutateAsync({ shopId, workerId: selectedWorkerId });
         toast.success("店家已刪除");
         utils.shops.list.invalidate();
       } catch (error) {
@@ -184,6 +193,7 @@ export default function ShopsPage() {
         <h1 className="text-3xl font-bold text-foreground">店家管理</h1>
         <Button
           onClick={() => handleOpenDialog()}
+          disabled={selectedWorkerId == null}
           className="bg-primary text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -191,6 +201,12 @@ export default function ShopsPage() {
         </Button>
       </div>
 
+      {selectedWorkerId == null ? (
+        <Card className="p-6">
+          <p className="text-muted-foreground">請先在右上角選擇成員，才能管理該成員的店家。</p>
+        </Card>
+      ) : (
+      <>
       {/* 店家列表 */}
       {isLoading ? (
         <div className="flex justify-center py-12">
@@ -262,6 +278,9 @@ export default function ShopsPage() {
             </Button>
           </div>
         </Card>
+      )}
+
+      </>
       )}
 
       {/* 新增/編輯對話框 */}

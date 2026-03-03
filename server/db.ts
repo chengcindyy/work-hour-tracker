@@ -213,66 +213,120 @@ export async function assertWorkerBelongsToUser(
 
 // ============ 店家相關查詢 ============
 
-export async function getUserShops(userId: number): Promise<Shop[]> {
+export async function getUserShops(userId: number, workerId: number): Promise<Shop[]> {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(shops).where(eq(shops.userId, userId));
+
+  return db
+    .select()
+    .from(shops)
+    .where(and(eq(shops.userId, userId), eq(shops.workerId, workerId)));
 }
 
-export async function getShopById(shopId: number, userId: number): Promise<Shop | undefined> {
+export async function getShopById(
+  shopId: number,
+  userId: number,
+  workerId: number
+): Promise<Shop | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  
+
+  const result = await db
+    .select()
+    .from(shops)
+    .where(
+      and(
+        eq(shops.id, shopId),
+        eq(shops.userId, userId),
+        eq(shops.workerId, workerId)
+      )
+    )
+    .limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+/** 僅依 userId 查詢店家（用於工時統計等顯示店名，不區分成員） */
+export async function getShopByIdForUser(shopId: number, userId: number): Promise<Shop | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
   const result = await db
     .select()
     .from(shops)
     .where(and(eq(shops.id, shopId), eq(shops.userId, userId)))
     .limit(1);
-  
+
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function createShop(userId: number, name: string, description?: string): Promise<Shop> {
+export async function createShop(
+  userId: number,
+  workerId: number,
+  name: string,
+  description?: string
+): Promise<Shop> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
   const result = await db
     .insert(shops)
     .values({
       userId,
+      workerId,
       name,
       description,
     })
     .returning();
-  
+
   if (!result[0]) throw new Error("Failed to create shop");
-  
+
   return result[0];
 }
 
-export async function updateShop(shopId: number, userId: number, updates: { name?: string; description?: string; isActive?: boolean }): Promise<Shop> {
+export async function updateShop(
+  shopId: number,
+  userId: number,
+  workerId: number,
+  updates: { name?: string; description?: string; isActive?: boolean }
+): Promise<Shop> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
   const result = await db
     .update(shops)
     .set(updates)
-    .where(and(eq(shops.id, shopId), eq(shops.userId, userId)))
+    .where(
+      and(
+        eq(shops.id, shopId),
+        eq(shops.userId, userId),
+        eq(shops.workerId, workerId)
+      )
+    )
     .returning();
-  
+
   if (!result[0]) throw new Error("Failed to update shop");
-  
+
   return result[0];
 }
 
-export async function deleteShop(shopId: number, userId: number): Promise<void> {
+export async function deleteShop(
+  shopId: number,
+  userId: number,
+  workerId: number
+): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
   await db
     .delete(shops)
-    .where(and(eq(shops.id, shopId), eq(shops.userId, userId)));
+    .where(
+      and(
+        eq(shops.id, shopId),
+        eq(shops.userId, userId),
+        eq(shops.workerId, workerId)
+      )
+    );
 }
 
 // ============ 服務類型相關查詢 ============
@@ -534,7 +588,7 @@ export async function getMonthlyStats(
     stats.totalTips += tips;
     
     if (!stats.byShop[record.shopId]) {
-      const shop = await getShopById(record.shopId, userId);
+      const shop = await getShopByIdForUser(record.shopId, userId);
       stats.byShop[record.shopId] = {
         shopName: shop?.name || "Unknown",
         hours: 0,

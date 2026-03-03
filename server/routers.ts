@@ -96,43 +96,51 @@ export const appRouter = router({
 
   // ============ 店家管理 ============
   shops: router({
-    list: protectedProcedure.query(({ ctx }) => {
-      return getUserShops(ctx.user.id);
-    }),
+    list: protectedProcedure
+      .input(z.object({ workerId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+        return getUserShops(ctx.user.id, input.workerId);
+      }),
 
     get: protectedProcedure
-      .input(z.object({ shopId: z.number() }))
-      .query(({ ctx, input }) => {
-        return getShopById(input.shopId, ctx.user.id);
+      .input(z.object({ shopId: z.number(), workerId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+        return getShopById(input.shopId, ctx.user.id, input.workerId);
       }),
 
     create: protectedProcedure
       .input(
         z.object({
+          workerId: z.number(),
           name: z.string().min(1, "店家名稱不能為空"),
           description: z.string().optional(),
         })
       )
-      .mutation(({ ctx, input }) => {
-        return createShop(ctx.user.id, input.name, input.description);
+      .mutation(async ({ ctx, input }) => {
+        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+        return createShop(ctx.user.id, input.workerId, input.name, input.description);
       }),
 
     update: protectedProcedure
       .input(
         z.object({
           shopId: z.number(),
+          workerId: z.number(),
           name: z.string().min(1).optional(),
           description: z.string().optional(),
           isActive: z.boolean().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const shop = await getShopById(input.shopId, ctx.user.id);
+        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+        const shop = await getShopById(input.shopId, ctx.user.id, input.workerId);
         if (!shop) {
           throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
         }
 
-        return updateShop(input.shopId, ctx.user.id, {
+        return updateShop(input.shopId, ctx.user.id, input.workerId, {
           name: input.name,
           description: input.description,
           isActive: input.isActive,
@@ -140,14 +148,15 @@ export const appRouter = router({
       }),
 
     delete: protectedProcedure
-      .input(z.object({ shopId: z.number() }))
+      .input(z.object({ shopId: z.number(), workerId: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        const shop = await getShopById(input.shopId, ctx.user.id);
+        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+        const shop = await getShopById(input.shopId, ctx.user.id, input.workerId);
         if (!shop) {
           throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
         }
 
-        await deleteShop(input.shopId, ctx.user.id);
+        await deleteShop(input.shopId, ctx.user.id, input.workerId);
         return { success: true };
       }),
   }),
@@ -162,12 +171,11 @@ export const appRouter = router({
         })
       )
       .query(async ({ ctx, input }) => {
-        const shop = await getShopById(input.shopId, ctx.user.id);
+        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+        const shop = await getShopById(input.shopId, ctx.user.id, input.workerId);
         if (!shop) {
           throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
         }
-
-        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
 
         return getShopServiceTypes(input.shopId, input.workerId);
       }),
@@ -191,7 +199,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
 
-        const shop = await getShopById(input.shopId, ctx.user.id);
+        const shop = await getShopById(input.shopId, ctx.user.id, input.workerId);
         if (!shop) {
           throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
         }
@@ -281,7 +289,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
 
-        const shop = await getShopById(input.shopId, ctx.user.id);
+        const shop = await getShopById(input.shopId, ctx.user.id, input.workerId);
         if (!shop) {
           throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
         }

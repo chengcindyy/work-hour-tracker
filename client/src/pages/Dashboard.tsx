@@ -11,7 +11,9 @@ import { zhTW } from "date-fns/locale";
 export default function Dashboard() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
-  const { selectedWorkerId } = useWorkerSelection();
+  const { selectedWorkerId, workers } = useWorkerSelection();
+  const selectedWorker = selectedWorkerId != null ? workers.find((w) => w.id === selectedWorkerId) : null;
+  const displayName = selectedWorker?.name ?? user?.name ?? "訪客";
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -33,7 +35,10 @@ export default function Dashboard() {
     }
   );
 
-  const { data: shops } = trpc.shops.list.useQuery();
+  const { data: shops } = trpc.shops.list.useQuery(
+    { workerId: selectedWorkerId! },
+    { enabled: selectedWorkerId != null }
+  );
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("zh-TW", {
@@ -52,7 +57,7 @@ export default function Dashboard() {
       {/* 標題 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">歡迎回來，{user?.name}！</h1>
+          <h1 className="text-3xl font-bold text-foreground">歡迎回來，{displayName}！</h1>
           <p className="text-muted-foreground mt-1">
             {format(now, "MMMM yyyy", { locale: zhTW })}
           </p>

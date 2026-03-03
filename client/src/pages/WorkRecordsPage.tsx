@@ -37,7 +37,10 @@ export default function WorkRecordsPage() {
 
   const { selectedWorkerId } = useWorkerSelection();
 
-  const { data: shops } = trpc.shops.list.useQuery();
+  const { data: shops } = trpc.shops.list.useQuery(
+    { workerId: selectedWorkerId! },
+    { enabled: selectedWorkerId != null }
+  );
   const { data: workRecords, isLoading } = trpc.workRecords.list.useQuery(
     {
       workerId: selectedWorkerId ?? undefined,

@@ -46,11 +46,14 @@ export type Worker = typeof workers.$inferSelect;
 export type InsertWorker = typeof workers.$inferInsert;
 
 /**
- * 店家表：存儲用戶的多家店舖信息
+ * 店家表：存儲用戶的多家店舖信息（依成員區分，每位成員有自己的店家清單）
  */
 export const shops = pgTable("shops", {
   id: serial("id").primaryKey(),
-  userId: serial("userId").notNull(), // 外鍵，關聯到 users 表
+  userId: serial("userId").notNull(), // 外鍵，關聯到 users 表（帳號擁有者）
+  workerId: integer("workerId")
+    .notNull()
+    .references(() => workers.id), // 外鍵，關聯到 workers 表（此店家屬於哪一位成員）
   name: varchar("name", { length: 255 }).notNull(), // 店家名稱
   description: text("description"), // 店家描述
   isActive: boolean("isActive").default(true).notNull(), // 是否啟用
