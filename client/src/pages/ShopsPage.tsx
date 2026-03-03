@@ -14,11 +14,18 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Edit2, Trash2, Plus, Store, DollarSign } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export default function ShopsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingShop, setEditingShop] = useState<any>(null);
-  const [formData, setFormData] = useState({ name: "", description: "" });
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    payType: "hourly" as "hourly" | "commission",
+    shopCommissionRatePct: "",
+  });
 
   const [ratesDialogShopId, setRatesDialogShopId] = useState<number | null>(null);
   const [ratesFormData, setRatesFormData] = useState({
@@ -38,6 +45,9 @@ export default function ShopsPage() {
   const deleteShopMutation = trpc.shops.delete.useMutation();
   const utils = trpc.useUtils();
 
+  const ratesDialogShop = ratesDialogShopId ? shops?.find((s) => s.id === ratesDialogShopId) : null;
+  const isRatesDialogCommission = (ratesDialogShop as any)?.payType === "commission";
+
   const { data: serviceTypes } = trpc.serviceTypes.listByShop.useQuery(
     ratesDialogShopId && selectedWorkerId != null
       ? {
@@ -53,10 +63,17 @@ export default function ShopsPage() {
   const handleOpenDialog = (shop?: any) => {
     if (shop) {
       setEditingShop(shop);
-      setFormData({ name: shop.name, description: shop.description || "" });
+      const payType = (shop.payType as string) === "commission" ? "commission" : "hourly";
+      const rate = shop.shopCommissionRate != null ? parseFloat(shop.shopCommissionRate as string) : 0;
+      setFormData({
+        name: shop.name,
+        description: shop.description || "",
+        payType,
+        shopCommissionRatePct: payType === "commission" && rate > 0 ? (rate * 100).toString() : "",
+      });
     } else {
       setEditingShop(null);
-      setFormData({ name: "", description: "" });
+      setFormData({ name: "", description: "", payType: "hourly", shopCommissionRatePct: "" });
     }
     setIsDialogOpen(true);
   };
@@ -64,7 +81,7 @@ export default function ShopsPage() {
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
     setEditingShop(null);
-    setFormData({ name: "", description: "" });
+    setFormData({ name: "", description: "", payType: "hourly", shopCommissionRatePct: "" });
   };
 
   const handleSubmit = async () => {
@@ -72,10 +89,21 @@ export default function ShopsPage() {
       toast.error("請輸入店家名稱");
       return;
     }
+    if (formData.payType === "commission") {
+      const pct = parseFloat(formData.shopCommissionRatePct);
+      if (isNaN(pct) || pct < 0 || pct > 100) {
+        toast.error("抽成制請輸入店家抽成比例（0～100）");
+        return;
+      }
+    }
     if (selectedWorkerId == null) {
       toast.error("請先選擇成員");
       return;
     }
+    const shopCommissionRate =
+      formData.payType === "commission"
+        ? parseFloat(formData.shopCommissionRatePct) / 100
+        : undefined;
     try {
       if (editingShop) {
         await updateShopMutation.mutateAsync({
@@ -83,6 +111,8 @@ export default function ShopsPage() {
           workerId: selectedWorkerId,
           name: formData.name,
           description: formData.description,
+          payType: formData.payType,
+          shopCommissionRate,
         });
         toast.success("店家已更新");
       } else {
@@ -90,6 +120,8 @@ export default function ShopsPage() {
           workerId: selectedWorkerId,
           name: formData.name,
           description: formData.description,
+          payType: formData.payType,
+          shopCommissionRate,
         });
         toast.success("店家已新增");
       }
@@ -139,8 +171,8 @@ export default function ShopsPage() {
       toast.error("請輸入服務類型名稱");
       return;
     }
-    const hourlyPay = parseFloat(ratesFormData.hourlyPay);
-    if (isNaN(hourlyPay) || hourlyPay <= 0) {
+    const hourlyPay = isRatesDialogCommission ? 0 : parseFloat(ratesFormData.hourlyPay);
+    if (!isRatesDialogCommission && (isNaN(hourlyPay) || hourlyPay <= 0)) {
       toast.error("請輸入有效的時薪（大於 0）");
       return;
     }
@@ -220,7 +252,12 @@ export default function ShopsPage() {
                 <div className="flex items-center gap-3">
                   <Store className="w-8 h-8 text-primary opacity-60" />
                   <div>
-                    <h3 className="font-semibold text-foreground">{shop.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-foreground">{shop.name}</h3>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                        {(shop as any).payType === "commission" ? "抽成制" : "時薪制"}
+                      </span>
+                    </div>
                     {shop.description && (
                       <p className="text-sm text-muted-foreground mt-1">
                         {shop.description}
@@ -238,7 +275,7 @@ export default function ShopsPage() {
                   className="flex-1"
                 >
                   <DollarSign className="w-4 h-4 mr-1" />
-                  時薪設定
+                  {(shop as any).payType === "commission" ? "服務類型" : "時薪設定"}
                 </Button>
                 <Button
                   variant="outline"
@@ -319,6 +356,46 @@ export default function ShopsPage() {
               />
             </div>
 
+            <div className="form-group">
+              <label className="form-label">計薪方式</label>
+              <RadioGroup
+                value={formData.payType}
+                onValueChange={(v) =>
+                  setFormData({ ...formData, payType: v as "hourly" | "commission", shopCommissionRatePct: v === "commission" ? formData.shopCommissionRatePct : "" })
+                }
+                className="flex gap-2"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="hourly" id="payType-hourly" />
+                  <Label htmlFor="payType-hourly" className="cursor-pointer">時薪制</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="commission" id="payType-commission" />
+                  <Label htmlFor="payType-commission" className="cursor-pointer">抽成制</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {formData.payType === "commission" && (
+              <div className="form-group">
+                <label className="form-label">店家抽成比例</label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    placeholder="例如：30 表示 30%"
+                    value={formData.shopCommissionRatePct}
+                    onChange={(e) =>
+                      setFormData({ ...formData, shopCommissionRatePct: e.target.value })
+                    }
+                  />
+                  <span className="text-muted-foreground">%</span>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-2 pt-4">
               <Button
                 variant="outline"
@@ -341,7 +418,7 @@ export default function ShopsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 時薪設定對話框 */}
+      {/* 時薪設定 / 服務類型對話框 */}
       <Dialog
         open={!!ratesDialogShopId}
         onOpenChange={(open) => !open && handleCloseRatesDialog()}
@@ -349,10 +426,12 @@ export default function ShopsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              時薪設定 - {shops?.find((s) => s.id === ratesDialogShopId)?.name ?? ""}
+              {isRatesDialogCommission ? "服務類型" : "時薪設定"} - {ratesDialogShop?.name ?? ""}
             </DialogTitle>
             <DialogDescription>
-              管理此店家的服務類型與時薪
+              {isRatesDialogCommission
+                ? "管理此店家的服務類型（用於分類）"
+                : "管理此店家的服務類型與時薪"}
             </DialogDescription>
           </DialogHeader>
 
@@ -370,7 +449,7 @@ export default function ShopsPage() {
                         setEditingServiceTypeId(st.id);
                         setRatesFormData({
                           name: st.name,
-                          hourlyPay: parseFloat(st.hourlyPay as any).toString(),
+                          hourlyPay: st.hourlyPay != null ? parseFloat(st.hourlyPay as any).toString() : "0",
                           description: st.description || "",
                         });
                       }}
@@ -378,9 +457,11 @@ export default function ShopsPage() {
                       <span className="font-medium text-foreground">
                         {st.name}
                       </span>
-                      <span className="text-muted-foreground">
-                        {formatCurrency(parseFloat(st.hourlyPay as string))}/小時
-                      </span>
+                      {!isRatesDialogCommission && (
+                        <span className="text-muted-foreground">
+                          {formatCurrency(parseFloat(st.hourlyPay as string))}/小時
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -402,19 +483,21 @@ export default function ShopsPage() {
                     setRatesFormData({ ...ratesFormData, name: e.target.value })
                   }
                 />
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="時薪 *"
-                  value={ratesFormData.hourlyPay}
-                  onChange={(e) =>
-                    setRatesFormData({
-                      ...ratesFormData,
-                      hourlyPay: e.target.value,
-                    })
-                  }
-                />
+                {!isRatesDialogCommission && (
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="時薪 *"
+                    value={ratesFormData.hourlyPay}
+                    onChange={(e) =>
+                      setRatesFormData({
+                        ...ratesFormData,
+                        hourlyPay: e.target.value,
+                      })
+                    }
+                  />
+                )}
                 <Textarea
                   placeholder="描述（選填）"
                   value={ratesFormData.description}

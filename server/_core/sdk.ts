@@ -201,7 +201,10 @@ class SDKServer {
     cookieValue: string | undefined | null
   ): Promise<{ openId: string; appId: string; name: string } | null> {
     if (!cookieValue) {
-      console.warn("[Auth] Missing session cookie");
+      // In dev, missing cookie is expected when using DEV_FALLBACK_USER
+      if (ENV.isProduction) {
+        console.warn("[Auth] Missing session cookie");
+      }
       return null;
     }
 

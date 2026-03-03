@@ -56,6 +56,8 @@ export const shops = pgTable("shops", {
     .references(() => workers.id), // 外鍵，關聯到 workers 表（此店家屬於哪一位成員）
   name: varchar("name", { length: 255 }).notNull(), // 店家名稱
   description: text("description"), // 店家描述
+  payType: varchar("payType", { length: 32 }).notNull().default("hourly"), // 計薪方式：hourly | commission
+  shopCommissionRate: numeric("shopCommissionRate", { precision: 5, scale: 4 }), // 店家抽成比例 0~1，僅抽成制使用
   isActive: boolean("isActive").default(true).notNull(), // 是否啟用
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
@@ -94,12 +96,15 @@ export const workRecords = pgTable("workRecords", {
     .notNull()
     .references(() => workers.id), // 外鍵，關聯到 workers 表（實際工作者）
   shopId: serial("shopId").notNull(), // 外鍵，關聯到 shops 表
-  serviceTypeId: serial("serviceTypeId").notNull(), // 外鍵，關聯到 serviceTypes 表
+  serviceTypeId: integer("serviceTypeId").references(() => serviceTypes.id), // 抽成制或舊資料使用；時薪制改用 line items
   workDate: date("workDate").notNull(), // 工作日期
-  hours: numeric("hours", { precision: 10, scale: 2 }).notNull(), // 工作時數
-  tips: numeric("tips", { precision: 10, scale: 2 }).default("0").notNull(), // 小費
-  hourlyPay: numeric("hourlyPay", { precision: 10, scale: 2 }).notNull(), // 記錄當時的時薪（防止時薪變更影響歷史記錄）
-  totalEarnings: numeric("totalEarnings", { precision: 10, scale: 2 }).notNull(), // 總收入 = hours * hourlyPay + tips
+  hours: numeric("hours", { precision: 10, scale: 2 }), // 抽成制或舊資料；時薪制改用 line items
+  cashTips: numeric("cashTips", { precision: 10, scale: 2 }).default("0").notNull(), // 現金小費
+  cardTips: numeric("cardTips", { precision: 10, scale: 2 }).default("0").notNull(), // 刷卡小費
+  hourlyPay: numeric("hourlyPay", { precision: 10, scale: 2 }), // 抽成制或舊資料；時薪制改用 line items
+  serviceAmount: numeric("serviceAmount", { precision: 10, scale: 2 }), // 服務總金額（抽成制使用）
+  shopCommissionAmount: numeric("shopCommissionAmount", { precision: 10, scale: 2 }), // 店家抽成金額（抽成制使用）
+  totalEarnings: numeric("totalEarnings", { precision: 10, scale: 2 }).notNull(), // 總收入
   notes: text("notes"), // 備註
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
@@ -107,6 +112,26 @@ export const workRecords = pgTable("workRecords", {
 
 export type WorkRecord = typeof workRecords.$inferSelect;
 export type InsertWorkRecord = typeof workRecords.$inferInsert;
+
+/**
+ * 工時紀錄明細表：時薪制可有多個服務項目（各項目不同時薪與時數）
+ */
+export const workRecordLineItems = pgTable("workRecordLineItems", {
+  id: serial("id").primaryKey(),
+  workRecordId: integer("workRecordId")
+    .notNull()
+    .references(() => workRecords.id, { onDelete: "cascade" }),
+  serviceTypeId: integer("serviceTypeId")
+    .notNull()
+    .references(() => serviceTypes.id),
+  hours: numeric("hours", { precision: 10, scale: 2 }).notNull(),
+  hourlyPay: numeric("hourlyPay", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type WorkRecordLineItem = typeof workRecordLineItems.$inferSelect;
+export type InsertWorkRecordLineItem = typeof workRecordLineItems.$inferInsert;
 
 /**
  * 推播通知設定表：存儲用戶的推播提醒設定

@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import {
@@ -7,11 +7,13 @@ import {
   shops,
   serviceTypes,
   workRecords,
+  workRecordLineItems,
   notificationSettings,
   workers,
   type Shop,
   type ServiceType,
   type WorkRecord,
+  type WorkRecordLineItem,
   type NotificationSetting,
   type Worker,
 } from "../drizzle/schema";
@@ -264,19 +266,27 @@ export async function createShop(
   userId: number,
   workerId: number,
   name: string,
-  description?: string
+  description?: string,
+  payType: "hourly" | "commission" = "hourly",
+  shopCommissionRate?: number
 ): Promise<Shop> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
+  const values: Record<string, unknown> = {
+    userId,
+    workerId,
+    name,
+    description,
+    payType,
+  };
+  if (payType === "commission" && shopCommissionRate != null) {
+    values.shopCommissionRate = shopCommissionRate.toString();
+  }
+
   const result = await db
     .insert(shops)
-    .values({
-      userId,
-      workerId,
-      name,
-      description,
-    })
+    .values(values as any)
     .returning();
 
   if (!result[0]) throw new Error("Failed to create shop");
@@ -288,14 +298,19 @@ export async function updateShop(
   shopId: number,
   userId: number,
   workerId: number,
-  updates: { name?: string; description?: string; isActive?: boolean }
+  updates: { name?: string; description?: string; isActive?: boolean; payType?: "hourly" | "commission"; shopCommissionRate?: number }
 ): Promise<Shop> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
+  const setValues: Record<string, unknown> = { ...updates };
+  if (updates.shopCommissionRate !== undefined) {
+    setValues.shopCommissionRate = updates.shopCommissionRate.toString();
+  }
+
   const result = await db
     .update(shops)
-    .set(updates)
+    .set(setValues as any)
     .where(
       and(
         eq(shops.id, shopId),
@@ -414,12 +429,53 @@ export async function deleteServiceType(serviceTypeId: number): Promise<void> {
 
 // ============ 工時紀錄相關查詢 ============
 
+export type WorkRecordWithLineItems = WorkRecord & {
+  lineItems?: { serviceTypeId: number; hours: number; hourlyPay: number; serviceTypeName?: string }[];
+};
+
+async function attachLineItemsToRecords(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  records: WorkRecord[]
+): Promise<WorkRecordWithLineItems[]> {
+  if (records.length === 0) return [];
+  const ids = records.map((r) => r.id);
+  const allLineItems = await db
+    .select()
+    .from(workRecordLineItems)
+    .where(inArray(workRecordLineItems.workRecordId, ids));
+  const byRecordId = new Map<number, WorkRecordLineItem[]>();
+  for (const li of allLineItems) {
+    const list = byRecordId.get(li.workRecordId) ?? [];
+    list.push(li);
+    byRecordId.set(li.workRecordId, list);
+  }
+  const serviceTypeIds = Array.from(new Set(allLineItems.map((li) => li.serviceTypeId)));
+  const serviceTypeMap = new Map<number, string>();
+  for (const stId of serviceTypeIds) {
+    const st = await getServiceTypeById(stId);
+    if (st) serviceTypeMap.set(stId, st.name);
+  }
+  return records.map((r) => {
+    const items = byRecordId.get(r.id) ?? [];
+    const lineItems =
+      items.length > 0
+        ? items.map((li) => ({
+            serviceTypeId: li.serviceTypeId,
+            hours: parseFloat(li.hours as any),
+            hourlyPay: parseFloat(li.hourlyPay as any),
+            serviceTypeName: serviceTypeMap.get(li.serviceTypeId),
+          }))
+        : undefined;
+    return { ...r, lineItems };
+  });
+}
+
 export async function getUserWorkRecords(
   userId: number,
   workerId?: number,
   startDate?: Date,
   endDate?: Date
-): Promise<WorkRecord[]> {
+): Promise<WorkRecordWithLineItems[]> {
   const db = await getDb();
   if (!db) return [];
 
@@ -436,61 +492,106 @@ export async function getUserWorkRecords(
     conditions.push(lte(workRecords.workDate, formatDateForDb(endDate)));
   }
 
-  return db
+  const records = await db
     .select()
     .from(workRecords)
     .where(and(...conditions))
     .orderBy(desc(workRecords.workDate));
+
+  return attachLineItemsToRecords(db, records);
 }
 
-export async function getWorkRecordById(recordId: number, userId: number): Promise<WorkRecord | undefined> {
+export async function getWorkRecordById(recordId: number, userId: number): Promise<WorkRecordWithLineItems | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  
+
   const result = await db
     .select()
     .from(workRecords)
     .where(and(eq(workRecords.id, recordId), eq(workRecords.userId, userId)))
     .limit(1);
-  
-  return result.length > 0 ? result[0] : undefined;
+
+  if (result.length === 0) return undefined;
+  const [record] = await attachLineItemsToRecords(db, result);
+  return record;
 }
 
 export async function createWorkRecord(
   userId: number,
   workerId: number,
   shopId: number,
-  serviceTypeId: number,
   workDate: Date,
-  hours: number,
-  tips: number,
-  hourlyPay: number,
-  notes?: string
+  cashTips: number,
+  cardTips: number,
+  notes: string | undefined,
+  options:
+    | { mode: "hourly"; lineItems: { serviceTypeId: number; hours: number }[] }
+    | { mode: "commission"; serviceTypeId: number; serviceAmount: number; shopCommissionRate: number; hours?: number }
 ): Promise<WorkRecord> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const totalEarnings = hours * hourlyPay + tips;
+  const tips = cashTips + cardTips;
+  let totalEarnings: number;
+  const baseValues: Record<string, unknown> = {
+    userId,
+    workerId,
+    shopId,
+    workDate: formatDateForDb(workDate),
+    cashTips: cashTips.toString(),
+    cardTips: cardTips.toString(),
+    totalEarnings: "", // set below
+    notes,
+  };
+
+  if (options.mode === "hourly") {
+    let hourlyTotal = 0;
+    for (const item of options.lineItems) {
+      const st = await getServiceTypeById(item.serviceTypeId);
+      if (!st) throw new Error(`Service type ${item.serviceTypeId} not found`);
+      const pay = parseFloat(st.hourlyPay as any);
+      hourlyTotal += item.hours * pay;
+    }
+    totalEarnings = hourlyTotal + tips;
+    baseValues.serviceTypeId = null;
+    baseValues.hours = null;
+    baseValues.hourlyPay = null;
+  } else {
+    const { serviceTypeId, serviceAmount, shopCommissionRate, hours } = options;
+    const shopCommissionAmount = serviceAmount * shopCommissionRate;
+    totalEarnings = serviceAmount * (1 - shopCommissionRate) + tips;
+    baseValues.serviceTypeId = serviceTypeId;
+    baseValues.serviceAmount = serviceAmount.toString();
+    baseValues.shopCommissionAmount = shopCommissionAmount.toString();
+    baseValues.hours = hours != null && hours >= 0 ? hours.toString() : null;
+    baseValues.hourlyPay = null;
+  }
+  baseValues.totalEarnings = totalEarnings.toString();
 
   const result = await db
     .insert(workRecords)
-    .values({
-      userId,
-      workerId,
-      shopId,
-      serviceTypeId,
-      workDate: formatDateForDb(workDate),
-      hours: hours.toString(),
-      tips: tips.toString(),
-      hourlyPay: hourlyPay.toString(),
-      totalEarnings: totalEarnings.toString(),
-      notes,
-    })
+    .values(baseValues as any)
     .returning();
-  
+
   if (!result[0]) throw new Error("Failed to create work record");
-  
-  return result[0];
+
+  const record = result[0];
+
+  if (options.mode === "hourly") {
+    for (const item of options.lineItems) {
+      const st = await getServiceTypeById(item.serviceTypeId);
+      if (!st) throw new Error(`Service type ${item.serviceTypeId} not found`);
+      const pay = parseFloat(st.hourlyPay as any);
+      await db.insert(workRecordLineItems).values({
+        workRecordId: record.id,
+        serviceTypeId: item.serviceTypeId,
+        hours: item.hours.toString(),
+        hourlyPay: pay.toString(),
+      });
+    }
+  }
+
+  return record;
 }
 
 export async function updateWorkRecord(
@@ -502,37 +603,127 @@ export async function updateWorkRecord(
     workerId?: number;
     workDate?: Date;
     hours?: number;
-    tips?: number;
+    cashTips?: number;
+    cardTips?: number;
     hourlyPay?: number;
+    serviceAmount?: number;
+    shopCommissionRate?: number;
     notes?: string;
+    lineItems?: { serviceTypeId: number; hours: number }[];
   }
 ): Promise<WorkRecord> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
+  const record = await getWorkRecordById(recordId, userId);
+  if (!record) throw new Error("Work record not found");
+
+  const cashTips = updates.cashTips ?? parseFloat((record as any).cashTips as any) ?? 0;
+  const cardTips = updates.cardTips ?? parseFloat((record as any).cardTips as any) ?? 0;
+  const tips = cashTips + cardTips;
+
   const updateData: any = { ...updates };
-
-  if (updates.workerId !== undefined) {
-    updateData.workerId = updates.workerId;
-  }
-
+  delete updateData.lineItems;
   if (updates.workDate !== undefined) {
     updateData.workDate = formatDateForDb(updates.workDate);
   }
 
-  if (updates.hours !== undefined || updates.tips !== undefined || updates.hourlyPay !== undefined) {
-    const record = await getWorkRecordById(recordId, userId);
-    if (!record) throw new Error("Work record not found");
+  const isCommissionRecord = record.serviceAmount != null && parseFloat(record.serviceAmount as any) > 0;
 
-    const hours = updates.hours ?? parseFloat(record.hours as any);
-    const tips = updates.tips ?? parseFloat(record.tips as any);
-    const hourlyPay = updates.hourlyPay ?? parseFloat(record.hourlyPay as any);
+  // Hourly mode: lineItems provided
+  if (updates.lineItems !== undefined && updates.lineItems.length > 0 && !isCommissionRecord) {
+    let hourlyTotal = 0;
+    for (const item of updates.lineItems) {
+      const st = await getServiceTypeById(item.serviceTypeId);
+      if (!st) throw new Error(`Service type ${item.serviceTypeId} not found`);
+      const pay = parseFloat(st.hourlyPay as any);
+      hourlyTotal += item.hours * pay;
+    }
+    updateData.totalEarnings = (hourlyTotal + tips).toString();
+    updateData.serviceTypeId = null;
+    updateData.hours = null;
+    updateData.hourlyPay = null;
+    updateData.serviceAmount = null;
+    updateData.shopCommissionAmount = null;
+    if (updates.cashTips !== undefined) updateData.cashTips = cashTips.toString();
+    if (updates.cardTips !== undefined) updateData.cardTips = cardTips.toString();
 
+    const result = await db
+      .update(workRecords)
+      .set(updateData)
+      .where(and(eq(workRecords.id, recordId), eq(workRecords.userId, userId)))
+      .returning();
+
+    if (!result[0]) throw new Error("Failed to update work record");
+
+    await db.delete(workRecordLineItems).where(eq(workRecordLineItems.workRecordId, recordId));
+    for (const item of updates.lineItems) {
+      const st = await getServiceTypeById(item.serviceTypeId);
+      if (!st) throw new Error(`Service type ${item.serviceTypeId} not found`);
+      const pay = parseFloat(st.hourlyPay as any);
+      await db.insert(workRecordLineItems).values({
+        workRecordId: recordId,
+        serviceTypeId: item.serviceTypeId,
+        hours: item.hours.toString(),
+        hourlyPay: pay.toString(),
+      });
+    }
+    return result[0];
+  }
+
+  // Commission mode update
+  if (updates.serviceAmount !== undefined && updates.shopCommissionRate !== undefined) {
+    const serviceAmount = updates.serviceAmount;
+    const rate = updates.shopCommissionRate;
+    const shopCommissionAmount = serviceAmount * rate;
+    const totalEarnings = serviceAmount * (1 - rate) + tips;
+    updateData.serviceAmount = serviceAmount.toString();
+    updateData.shopCommissionAmount = shopCommissionAmount.toString();
+    updateData.totalEarnings = totalEarnings.toString();
+    updateData.hourlyPay = null;
+    if (updates.hours !== undefined && updates.hours >= 0) {
+      updateData.hours = updates.hours.toString();
+    } else if (updates.hours === null || updates.hours === undefined) {
+      updateData.hours = record.hours;
+    }
+    if (updates.cashTips !== undefined) updateData.cashTips = cashTips.toString();
+    if (updates.cardTips !== undefined) updateData.cardTips = cardTips.toString();
+  }
+  // Hourly mode: legacy single serviceTypeId + hours (for records without line items)
+  else if ((updates.hours !== undefined || updates.hourlyPay !== undefined) && !isCommissionRecord) {
+    const hours = updates.hours ?? parseFloat(record.hours as any) ?? 0;
+    const hourlyPay = updates.hourlyPay ?? parseFloat(record.hourlyPay as any) ?? 0;
     updateData.totalEarnings = (hours * hourlyPay + tips).toString();
-
-    if (updates.hours !== undefined) updateData.hours = updates.hours.toString();
-    if (updates.tips !== undefined) updateData.tips = updates.tips.toString();
-    if (updates.hourlyPay !== undefined) updateData.hourlyPay = updates.hourlyPay.toString();
+    updateData.hours = hours.toString();
+    updateData.hourlyPay = hourlyPay.toString();
+    updateData.serviceAmount = null;
+    updateData.shopCommissionAmount = null;
+    if (updates.cashTips !== undefined) updateData.cashTips = cashTips.toString();
+    if (updates.cardTips !== undefined) updateData.cardTips = cardTips.toString();
+  } else if (updates.hours !== undefined && isCommissionRecord) {
+    const h = updates.hours;
+    updateData.hours = h >= 0 ? String(h) : null;
+  } else if (updates.cashTips !== undefined || updates.cardTips !== undefined) {
+    if (isCommissionRecord) {
+      const serviceAmount = parseFloat(record.serviceAmount as any);
+      const rate = parseFloat(record.shopCommissionAmount as any) / serviceAmount;
+      updateData.totalEarnings = (serviceAmount * (1 - rate) + tips).toString();
+    } else {
+      const lineItems = await getWorkRecordLineItems(recordId);
+      let hourlyTotal = 0;
+      if (lineItems.length > 0) {
+        for (const li of lineItems) {
+          hourlyTotal += parseFloat(li.hours as any) * parseFloat(li.hourlyPay as any);
+        }
+      } else {
+        const hours = parseFloat(record.hours as any) ?? 0;
+        const hourlyPay = parseFloat(record.hourlyPay as any) ?? 0;
+        hourlyTotal = hours * hourlyPay;
+      }
+      updateData.totalEarnings = (hourlyTotal + tips).toString();
+    }
+    updateData.cashTips = cashTips.toString();
+    updateData.cardTips = cardTips.toString();
   }
 
   const result = await db
@@ -540,10 +731,19 @@ export async function updateWorkRecord(
     .set(updateData)
     .where(and(eq(workRecords.id, recordId), eq(workRecords.userId, userId)))
     .returning();
-  
+
   if (!result[0]) throw new Error("Failed to update work record");
-  
+
   return result[0];
+}
+
+export async function getWorkRecordLineItems(workRecordId: number): Promise<WorkRecordLineItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(workRecordLineItems)
+    .where(eq(workRecordLineItems.workRecordId, workRecordId));
 }
 
 export async function deleteWorkRecord(recordId: number, userId: number): Promise<void> {
@@ -569,24 +769,44 @@ export async function getMonthlyStats(
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 0);
 
-  const records = await getUserWorkRecords(userId, workerId, startDate, endDate);
+  const records = (await getUserWorkRecords(userId, workerId, startDate, endDate)) as WorkRecordWithLineItems[];
 
   const stats = {
     totalHours: 0,
     totalEarnings: 0,
     totalTips: 0,
-    byShop: {} as Record<number, { shopName: string; hours: number; earnings: number; tips: number }>,
+    totalCashTips: 0,
+    totalCardTips: 0,
+    totalShopCommission: 0,
+    byShop: {} as Record<
+      number,
+      { shopName: string; hours: number; earnings: number; tips: number; cashTips: number; cardTips: number; shopCommission: number }
+    >,
   };
-  
+
   for (const record of records) {
-    const hours = parseFloat(record.hours as any);
+    let hours = 0;
+    if (record.lineItems && record.lineItems.length > 0) {
+      hours = record.lineItems.reduce((sum, li) => sum + li.hours, 0);
+    } else if (record.hours != null) {
+      hours = parseFloat(record.hours as any);
+    }
     const earnings = parseFloat(record.totalEarnings as any);
-    const tips = parseFloat(record.tips as any);
-    
+    const cashTips = parseFloat((record as any).cashTips as any) || 0;
+    const cardTips = parseFloat((record as any).cardTips as any) || 0;
+    const tips = cashTips + cardTips;
+    const shopCommission =
+      record.shopCommissionAmount != null
+        ? parseFloat(record.shopCommissionAmount as any)
+        : 0;
+
     stats.totalHours += hours;
     stats.totalEarnings += earnings;
     stats.totalTips += tips;
-    
+    stats.totalCashTips += cashTips;
+    stats.totalCardTips += cardTips;
+    stats.totalShopCommission += shopCommission;
+
     if (!stats.byShop[record.shopId]) {
       const shop = await getShopByIdForUser(record.shopId, userId);
       stats.byShop[record.shopId] = {
@@ -594,12 +814,18 @@ export async function getMonthlyStats(
         hours: 0,
         earnings: 0,
         tips: 0,
+        cashTips: 0,
+        cardTips: 0,
+        shopCommission: 0,
       };
     }
-    
+
     stats.byShop[record.shopId].hours += hours;
     stats.byShop[record.shopId].earnings += earnings;
     stats.byShop[record.shopId].tips += tips;
+    stats.byShop[record.shopId].cashTips += cashTips;
+    stats.byShop[record.shopId].cardTips += cardTips;
+    stats.byShop[record.shopId].shopCommission += shopCommission;
   }
   
   return stats;

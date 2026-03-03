@@ -4,7 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useLocation } from "wouter";
-import { Clock, TrendingUp, DollarSign, Gift } from "lucide-react";
+import { Clock, TrendingUp, DollarSign, Gift, HandCoins } from "lucide-react";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 
@@ -119,15 +119,29 @@ export default function Dashboard() {
                 {statsLoading || !monthlyStats?.totalHours
                   ? "-"
                   : formatCurrency(
-                      (monthlyStats.totalEarnings - monthlyStats.totalTips) /
-                        monthlyStats.totalHours
+                      monthlyStats.totalEarnings / monthlyStats.totalHours
                     )}
               </div>
-              <div className="text-xs text-muted-foreground mt-2">不含小費</div>
+              <div className="text-xs text-muted-foreground mt-2">含小費</div>
             </div>
             <TrendingUp className="w-12 h-12 text-primary opacity-20" />
           </div>
         </div>
+
+        {(monthlyStats as any)?.totalShopCommission > 0 && (
+          <div className="stat-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="stat-label">本月應繳抽成</div>
+                <div className="stat-value">
+                  {formatCurrency((monthlyStats as any).totalShopCommission)}
+                </div>
+                <div className="text-xs text-muted-foreground mt-2">店家抽成</div>
+              </div>
+              <HandCoins className="w-12 h-12 text-secondary opacity-20" />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 按店家分類統計 */}
@@ -135,24 +149,28 @@ export default function Dashboard() {
         <Card className="p-6">
           <h2 className="text-xl font-semibold text-foreground mb-4">按店家統計</h2>
           <div className="space-y-4">
-            {Object.entries(monthlyStats.byShop).map(([shopId, stats]) => (
-              <div key={shopId} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
-                <div>
-                  <div className="font-semibold text-foreground">{stats.shopName}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {formatHours(stats.hours)} 小時
+            {Object.entries(monthlyStats.byShop).map(([shopId, stats]) => {
+              const shopCommission = (stats as any).shopCommission ?? 0;
+              return (
+                <div key={shopId} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                  <div>
+                    <div className="font-semibold text-foreground">{stats.shopName}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {formatHours(stats.hours)} 小時
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold text-primary">
+                      {formatCurrency(stats.earnings)}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      小費：現金 {formatCurrency((stats as any).cashTips ?? 0)} / 刷卡 {formatCurrency((stats as any).cardTips ?? 0)}
+                      {shopCommission > 0 && ` · 抽成：${formatCurrency(shopCommission)}`}
+                    </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="font-semibold text-primary">
-                    {formatCurrency(stats.earnings)}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    小費：{formatCurrency(stats.tips)}
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       )}
@@ -178,6 +196,19 @@ export default function Dashboard() {
           <div className="space-y-3">
             {recentRecords.slice(0, 5).map((record) => {
               const shop = shops?.find((s) => s.id === record.shopId);
+              const rec = record as typeof record & { lineItems?: { hours: number }[] };
+              const totalHours =
+                rec.lineItems && rec.lineItems.length > 0
+                  ? rec.lineItems.reduce((s, li) => s + li.hours, 0)
+                  : record.hours != null
+                    ? parseFloat(record.hours as any)
+                    : 0;
+              const detailText =
+                totalHours > 0
+                  ? `${formatHours(totalHours)} 小時`
+                  : record.serviceAmount != null
+                    ? `服務 ${formatCurrency(parseFloat(record.serviceAmount as any))}`
+                    : "-";
               return (
                 <div
                   key={record.id}
@@ -193,9 +224,7 @@ export default function Dashboard() {
                     <div className="font-semibold text-primary">
                       {formatCurrency(parseFloat(record.totalEarnings as any))}
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                      {formatHours(parseFloat(record.hours as any))} 小時
-                    </div>
+                    <div className="text-sm text-muted-foreground">{detailText}</div>
                   </div>
                 </div>
               );

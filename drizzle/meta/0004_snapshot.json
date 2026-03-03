@@ -1,0 +1,150 @@
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "prevId": "8e74af15-dcbb-4a49-9d28-d29195a731ca",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.notificationSettings": {
+      "name": "notificationSettings",
+      "schema": "",
+      "columns": {
+        "id": {"name": "id", "type": "serial", "primaryKey": true, "notNull": true},
+        "userId": {"name": "userId", "type": "serial", "primaryKey": false, "notNull": true},
+        "isEnabled": {"name": "isEnabled", "type": "boolean", "primaryKey": false, "notNull": true, "default": true},
+        "reminderTime": {"name": "reminderTime", "type": "varchar(5)", "primaryKey": false, "notNull": true},
+        "reminderDays": {"name": "reminderDays", "type": "varchar(255)", "primaryKey": false, "notNull": true},
+        "createdAt": {"name": "createdAt", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"},
+        "updatedAt": {"name": "updatedAt", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"}
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {"notificationSettings_userId_unique": {"name": "notificationSettings_userId_unique", "nullsNotDistinct": false, "columns": ["userId"]}},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.serviceTypes": {
+      "name": "serviceTypes",
+      "schema": "",
+      "columns": {
+        "id": {"name": "id", "type": "serial", "primaryKey": true, "notNull": true},
+        "shopId": {"name": "shopId", "type": "serial", "primaryKey": false, "notNull": true},
+        "workerId": {"name": "workerId", "type": "integer", "primaryKey": false, "notNull": true},
+        "name": {"name": "name", "type": "varchar(255)", "primaryKey": false, "notNull": true},
+        "hourlyPay": {"name": "hourlyPay", "type": "numeric(10, 2)", "primaryKey": false, "notNull": true},
+        "description": {"name": "description", "type": "text", "primaryKey": false, "notNull": false},
+        "isActive": {"name": "isActive", "type": "boolean", "primaryKey": false, "notNull": true, "default": true},
+        "createdAt": {"name": "createdAt", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"},
+        "updatedAt": {"name": "updatedAt", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"}
+      },
+      "indexes": {},
+      "foreignKeys": {"serviceTypes_workerId_workers_id_fk": {"name": "serviceTypes_workerId_workers_id_fk", "tableFrom": "serviceTypes", "tableTo": "workers", "columnsFrom": ["workerId"], "columnsTo": ["id"], "onDelete": "no action", "onUpdate": "no action"}},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.shops": {
+      "name": "shops",
+      "schema": "",
+      "columns": {
+        "id": {"name": "id", "type": "serial", "primaryKey": true, "notNull": true},
+        "userId": {"name": "userId", "type": "serial", "primaryKey": false, "notNull": true},
+        "workerId": {"name": "workerId", "type": "integer", "primaryKey": false, "notNull": true},
+        "name": {"name": "name", "type": "varchar(255)", "primaryKey": false, "notNull": true},
+        "description": {"name": "description", "type": "text", "primaryKey": false, "notNull": false},
+        "payType": {"name": "payType", "type": "varchar(32)", "primaryKey": false, "notNull": true, "default": "'hourly'"},
+        "shopCommissionRate": {"name": "shopCommissionRate", "type": "numeric(5, 4)", "primaryKey": false, "notNull": false},
+        "isActive": {"name": "isActive", "type": "boolean", "primaryKey": false, "notNull": true, "default": true},
+        "createdAt": {"name": "createdAt", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"},
+        "updatedAt": {"name": "updatedAt", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"}
+      },
+      "indexes": {},
+      "foreignKeys": {"shops_workerId_workers_id_fk": {"name": "shops_workerId_workers_id_fk", "tableFrom": "shops", "tableTo": "workers", "columnsFrom": ["workerId"], "columnsTo": ["id"], "onDelete": "no action", "onUpdate": "no action"}},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {"name": "id", "type": "serial", "primaryKey": true, "notNull": true},
+        "openId": {"name": "openId", "type": "varchar(64)", "primaryKey": false, "notNull": true},
+        "name": {"name": "name", "type": "text", "primaryKey": false, "notNull": false},
+        "email": {"name": "email", "type": "varchar(320)", "primaryKey": false, "notNull": false},
+        "loginMethod": {"name": "loginMethod", "type": "varchar(64)", "primaryKey": false, "notNull": false},
+        "role": {"name": "role", "type": "text", "primaryKey": false, "notNull": true, "default": "'user'"},
+        "createdAt": {"name": "createdAt", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"},
+        "updatedAt": {"name": "updatedAt", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"},
+        "lastSignedIn": {"name": "lastSignedIn", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"}
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {"users_openId_unique": {"name": "users_openId_unique", "nullsNotDistinct": false, "columns": ["openId"]}},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.workRecords": {
+      "name": "workRecords",
+      "schema": "",
+      "columns": {
+        "id": {"name": "id", "type": "serial", "primaryKey": true, "notNull": true},
+        "userId": {"name": "userId", "type": "serial", "primaryKey": false, "notNull": true},
+        "workerId": {"name": "workerId", "type": "integer", "primaryKey": false, "notNull": true},
+        "shopId": {"name": "shopId", "type": "serial", "primaryKey": false, "notNull": true},
+        "serviceTypeId": {"name": "serviceTypeId", "type": "serial", "primaryKey": false, "notNull": true},
+        "workDate": {"name": "workDate", "type": "date", "primaryKey": false, "notNull": true},
+        "hours": {"name": "hours", "type": "numeric(10, 2)", "primaryKey": false, "notNull": false},
+        "cashTips": {"name": "cashTips", "type": "numeric(10, 2)", "primaryKey": false, "notNull": true, "default": "'0'"},
+        "cardTips": {"name": "cardTips", "type": "numeric(10, 2)", "primaryKey": false, "notNull": true, "default": "'0'"},
+        "hourlyPay": {"name": "hourlyPay", "type": "numeric(10, 2)", "primaryKey": false, "notNull": false},
+        "serviceAmount": {"name": "serviceAmount", "type": "numeric(10, 2)", "primaryKey": false, "notNull": false},
+        "shopCommissionAmount": {"name": "shopCommissionAmount", "type": "numeric(10, 2)", "primaryKey": false, "notNull": false},
+        "totalEarnings": {"name": "totalEarnings", "type": "numeric(10, 2)", "primaryKey": false, "notNull": true},
+        "notes": {"name": "notes", "type": "text", "primaryKey": false, "notNull": false},
+        "createdAt": {"name": "createdAt", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"},
+        "updatedAt": {"name": "updatedAt", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"}
+      },
+      "indexes": {},
+      "foreignKeys": {"workRecords_workerId_workers_id_fk": {"name": "workRecords_workerId_workers_id_fk", "tableFrom": "workRecords", "tableTo": "workers", "columnsFrom": ["workerId"], "columnsTo": ["id"], "onDelete": "no action", "onUpdate": "no action"}},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.workers": {
+      "name": "workers",
+      "schema": "",
+      "columns": {
+        "id": {"name": "id", "type": "serial", "primaryKey": true, "notNull": true},
+        "ownerUserId": {"name": "ownerUserId", "type": "integer", "primaryKey": false, "notNull": true},
+        "name": {"name": "name", "type": "varchar(255)", "primaryKey": false, "notNull": true},
+        "isActive": {"name": "isActive", "type": "boolean", "primaryKey": false, "notNull": true, "default": true},
+        "createdAt": {"name": "createdAt", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"},
+        "updatedAt": {"name": "updatedAt", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()"}
+      },
+      "indexes": {},
+      "foreignKeys": {"workers_ownerUserId_users_id_fk": {"name": "workers_ownerUserId_users_id_fk", "tableFrom": "workers", "tableTo": "users", "columnsFrom": ["ownerUserId"], "columnsTo": ["id"], "onDelete": "no action", "onUpdate": "no action"}},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {"columns": {}, "schemas": {}, "tables": {}}
+}

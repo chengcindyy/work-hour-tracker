@@ -22,6 +22,27 @@
       "when": 1772435933060,
       "tag": "0002_add_service_types_worker",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1772508382561,
+      "tag": "0003_add_commission_pay_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772510000000,
+      "tag": "0004_split_tips_cash_card",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1772511000000,
+      "tag": "0005_add_work_record_line_items",
+      "breakpoints": true
     }
   ]
 }

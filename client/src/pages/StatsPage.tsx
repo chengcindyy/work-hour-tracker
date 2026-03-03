@@ -66,12 +66,21 @@ export default function StatsPage() {
       csv += "總計\n";
       csv += `總工時,${formatHours(stats.totalHours)}\n`;
       csv += `總收入,${formatCurrency(stats.totalEarnings)}\n`;
-      csv += `總小費,${formatCurrency(stats.totalTips)}\n\n`;
+      csv += `總小費,${formatCurrency(stats.totalTips)}\n`;
+      csv += `現金小費,${formatCurrency((stats as any).totalCashTips ?? 0)}\n`;
+      csv += `刷卡小費,${formatCurrency((stats as any).totalCardTips ?? 0)}\n`;
+      if ((stats as any).totalShopCommission > 0) {
+        csv += `總抽成,${formatCurrency((stats as any).totalShopCommission)}\n`;
+      }
+      csv += "\n";
 
       csv += "按店家統計\n";
-      csv += "店家名稱,工時,收入,小費\n";
+      csv += "店家名稱,工時,收入,現金小費,刷卡小費,總小費,抽成\n";
       Object.entries(stats.byShop).forEach(([, data]) => {
-        csv += `${data.shopName},${formatHours(data.hours)},${formatCurrency(data.earnings)},${formatCurrency(data.tips)}\n`;
+        const shopCommission = (data as any).shopCommission ?? 0;
+        const cashTips = (data as any).cashTips ?? 0;
+        const cardTips = (data as any).cardTips ?? 0;
+        csv += `${data.shopName},${formatHours(data.hours)},${formatCurrency(data.earnings)},${formatCurrency(cashTips)},${formatCurrency(cardTips)},${formatCurrency(data.tips)},${formatCurrency(shopCommission)}\n`;
       });
 
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -167,19 +176,29 @@ export default function StatsPage() {
               <div className="stat-value">
                 {formatCurrency(stats.totalTips)}
               </div>
-              <div className="text-xs text-muted-foreground">本月累計</div>
+              <div className="text-xs text-muted-foreground">
+                現金 {formatCurrency((stats as any).totalCashTips ?? 0)} / 刷卡 {formatCurrency((stats as any).totalCardTips ?? 0)}
+              </div>
             </div>
+
+            {(stats as any).totalShopCommission > 0 && (
+              <div className="stat-card">
+                <div className="stat-label">總抽成</div>
+                <div className="stat-value">
+                  {formatCurrency((stats as any).totalShopCommission)}
+                </div>
+                <div className="text-xs text-muted-foreground">本月應繳</div>
+              </div>
+            )}
 
             <div className="stat-card">
               <div className="stat-label">平均時薪</div>
               <div className="stat-value">
                 {stats.totalHours > 0
-                  ? formatCurrency(
-                      (stats.totalEarnings - stats.totalTips) / stats.totalHours
-                    )
+                  ? formatCurrency(stats.totalEarnings / stats.totalHours)
                   : "-"}
               </div>
-              <div className="text-xs text-muted-foreground">不含小費</div>
+              <div className="text-xs text-muted-foreground">含小費</div>
             </div>
           </div>
 
@@ -255,19 +274,24 @@ export default function StatsPage() {
                           收入
                         </th>
                         <th className="text-right px-4 py-3 font-semibold text-foreground">
-                          小費
+                          現金小費
                         </th>
                         <th className="text-right px-4 py-3 font-semibold text-foreground">
-                          平均時薪
+                          刷卡小費
+                        </th>
+                        <th className="text-right px-4 py-3 font-semibold text-foreground">
+                          抽成
+                        </th>
+                        <th className="text-right px-4 py-3 font-semibold text-foreground">
+                          平均時薪 (含小費)
                         </th>
                       </tr>
                     </thead>
                     <tbody>
                       {Object.entries(stats.byShop).map(([, data]) => {
                         const avgHourly =
-                          data.hours > 0
-                            ? (data.earnings - data.tips) / data.hours
-                            : 0;
+                          data.hours > 0 ? data.earnings / data.hours : 0;
+                        const shopCommission = (data as any).shopCommission ?? 0;
                         return (
                           <tr key={data.shopName} className="border-b border-border hover:bg-muted/10">
                             <td className="px-4 py-3 text-foreground">
@@ -280,7 +304,13 @@ export default function StatsPage() {
                               {formatCurrency(data.earnings)}
                             </td>
                             <td className="text-right px-4 py-3 text-accent">
-                              {formatCurrency(data.tips)}
+                              {formatCurrency((data as any).cashTips ?? 0)}
+                            </td>
+                            <td className="text-right px-4 py-3 text-accent">
+                              {formatCurrency((data as any).cardTips ?? 0)}
+                            </td>
+                            <td className="text-right px-4 py-3 text-muted-foreground">
+                              {formatCurrency(shopCommission)}
                             </td>
                             <td className="text-right px-4 py-3 text-muted-foreground">
                               {formatCurrency(avgHourly)}

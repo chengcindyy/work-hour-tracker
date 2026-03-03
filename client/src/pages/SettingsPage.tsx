@@ -116,11 +116,23 @@ export default function SettingsPage() {
 
     try {
       let csv = "工時紀錄完整備份\n\n";
-      csv += "日期,店家,服務類型,時數,時薪,小費,總收入,備註\n";
+      csv += "日期,店家,服務類型,時數,時薪,現金小費,刷卡小費,項目收入,備註\n";
 
       workRecords.forEach((record) => {
         const workDate = new Date(record.workDate).toLocaleDateString("zh-TW");
-        csv += `${workDate},"${record.shopId}","${record.serviceTypeId}",${parseFloat(record.hours as any)},${parseFloat(record.hourlyPay as any)},${parseFloat(record.tips as any)},${parseFloat(record.totalEarnings as any)},"${record.notes || ""}"\n`;
+        const cashTips = parseFloat((record as any).cashTips as any) || 0;
+        const cardTips = parseFloat((record as any).cardTips as any) || 0;
+        const rec = record as typeof record & { lineItems?: { serviceTypeId: number; hours: number; hourlyPay: number; serviceTypeName?: string }[] };
+        if (rec.lineItems && rec.lineItems.length > 0) {
+          rec.lineItems.forEach((li, i) => {
+            const itemEarnings = li.hours * li.hourlyPay;
+            csv += `${workDate},"${record.shopId}","${li.serviceTypeName ?? li.serviceTypeId}",${li.hours},${li.hourlyPay},${i === 0 ? cashTips : 0},${i === 0 ? cardTips : 0},${itemEarnings},"${i === 0 ? (record.notes || "") : ""}"\n`;
+          });
+        } else {
+          const hours = record.hours != null ? parseFloat(record.hours as any) : 0;
+          const hourlyPay = record.hourlyPay != null ? parseFloat(record.hourlyPay as any) : 0;
+          csv += `${workDate},"${record.shopId}","${record.serviceTypeId}",${hours},${hourlyPay},${cashTips},${cardTips},${hours * hourlyPay},"${record.notes || ""}"\n`;
+        }
       });
 
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });

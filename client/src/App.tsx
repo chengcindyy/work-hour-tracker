@@ -1,3 +1,4 @@
+import { AuthPrefetcher } from "@/components/AuthPrefetcher";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
@@ -73,6 +74,7 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
+          <AuthPrefetcher />
           <Toaster />
           <Router />
         </TooltipProvider>

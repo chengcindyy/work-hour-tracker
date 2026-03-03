@@ -11,6 +11,7 @@ import {
   assertWorkerBelongsToUser,
   getUserShops,
   getShopById,
+  getShopByIdForUser,
   createShop,
   updateShop,
   deleteShop,
@@ -116,11 +117,26 @@ export const appRouter = router({
           workerId: z.number(),
           name: z.string().min(1, "店家名稱不能為空"),
           description: z.string().optional(),
+          payType: z.enum(["hourly", "commission"]).default("hourly"),
+          shopCommissionRate: z.number().min(0).max(1).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
-        return createShop(ctx.user.id, input.workerId, input.name, input.description);
+        if (input.payType === "commission" && (input.shopCommissionRate == null || input.shopCommissionRate < 0 || input.shopCommissionRate > 1)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "抽成制請設定店家抽成比例（0～1）",
+          });
+        }
+        return createShop(
+          ctx.user.id,
+          input.workerId,
+          input.name,
+          input.description,
+          input.payType,
+          input.shopCommissionRate
+        );
       }),
 
     update: protectedProcedure
@@ -131,6 +147,8 @@ export const appRouter = router({
           name: z.string().min(1).optional(),
           description: z.string().optional(),
           isActive: z.boolean().optional(),
+          payType: z.enum(["hourly", "commission"]).optional(),
+          shopCommissionRate: z.number().min(0).max(1).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -139,11 +157,20 @@ export const appRouter = router({
         if (!shop) {
           throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
         }
+        const targetPayType = input.payType ?? (shop as any).payType ?? "hourly";
+        if (targetPayType === "commission" && input.shopCommissionRate == null && (shop as any).shopCommissionRate == null) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "抽成制請設定店家抽成比例（0～1）",
+          });
+        }
 
         return updateShop(input.shopId, ctx.user.id, input.workerId, {
           name: input.name,
           description: input.description,
           isActive: input.isActive,
+          payType: input.payType,
+          shopCommissionRate: input.shopCommissionRate,
         });
       }),
 
@@ -192,7 +219,7 @@ export const appRouter = router({
           shopId: z.number(),
           workerId: z.number(),
           name: z.string().min(1, "服務類型名稱不能為空"),
-          hourlyPay: z.number().positive("時薪必須大於 0"),
+          hourlyPay: z.number().min(0, "時薪不能為負數"),
           description: z.string().optional(),
         })
       )
@@ -202,6 +229,10 @@ export const appRouter = router({
         const shop = await getShopById(input.shopId, ctx.user.id, input.workerId);
         if (!shop) {
           throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
+        }
+        const payType = (shop as any).payType ?? "hourly";
+        if (payType === "hourly" && input.hourlyPay <= 0) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "時薪制店家的時薪必須大於 0" });
         }
 
         return createServiceType(
@@ -218,15 +249,18 @@ export const appRouter = router({
         z.object({
           serviceTypeId: z.number(),
           name: z.string().min(1).optional(),
-          hourlyPay: z.number().positive().optional(),
+          hourlyPay: z.number().min(0).optional(),
           description: z.string().optional(),
           isActive: z.boolean().optional(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const serviceType = await getServiceTypeById(input.serviceTypeId);
         if (!serviceType) {
           throw new TRPCError({ code: "NOT_FOUND", message: "服務類型不存在" });
+        }
+        if (input.hourlyPay !== undefined && input.hourlyPay < 0) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "時薪不能為負數" });
         }
 
         return updateServiceType(input.serviceTypeId, {
@@ -279,10 +313,16 @@ export const appRouter = router({
         z.object({
           workerId: z.number(),
           shopId: z.number(),
-          serviceTypeId: z.number(),
+          serviceTypeId: z.number().optional(),
           workDate: z.date(),
-          hours: z.number().positive("時數必須大於 0"),
-          tips: z.number().nonnegative("小費不能為負數").default(0),
+          hours: z.number().min(0).optional(),
+          serviceAmount: z.number().positive().optional(),
+          lineItems: z
+            .array(z.object({ serviceTypeId: z.number(), hours: z.number().positive() }))
+            .min(1, "時薪制請至少新增一筆項目")
+            .optional(),
+          cashTips: z.number().nonnegative("現金小費不能為負數").default(0),
+          cardTips: z.number().nonnegative("刷卡小費不能為負數").default(0),
           notes: z.string().optional(),
         })
       )
@@ -294,24 +334,58 @@ export const appRouter = router({
           throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
         }
 
-        const serviceType = await getServiceTypeById(input.serviceTypeId);
-        if (!serviceType) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "服務類型不存在" });
+        const payType = (shop as any).payType ?? "hourly";
+
+        if (payType === "hourly") {
+          if (!input.lineItems || input.lineItems.length === 0) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "時薪制請至少新增一筆項目" });
+          }
+          for (const item of input.lineItems) {
+            const st = await getServiceTypeById(item.serviceTypeId);
+            if (!st) throw new TRPCError({ code: "NOT_FOUND", message: `服務類型 ${item.serviceTypeId} 不存在` });
+          }
+          return createWorkRecord(
+            ctx.user.id,
+            input.workerId,
+            input.shopId,
+            input.workDate,
+            input.cashTips,
+            input.cardTips,
+            input.notes,
+            { mode: "hourly", lineItems: input.lineItems }
+          );
+        } else {
+          if (input.serviceAmount == null || input.serviceAmount <= 0) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "抽成制請輸入服務總金額" });
+          }
+          if (input.serviceTypeId == null) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "抽成制請選擇服務類型" });
+          }
+          const serviceType = await getServiceTypeById(input.serviceTypeId);
+          if (!serviceType) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "服務類型不存在" });
+          }
+          const rate = parseFloat((shop as any).shopCommissionRate as any);
+          if (isNaN(rate) || rate < 0 || rate > 1) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "店家抽成比例設定有誤" });
+          }
+          return createWorkRecord(
+            ctx.user.id,
+            input.workerId,
+            input.shopId,
+            input.workDate,
+            input.cashTips,
+            input.cardTips,
+            input.notes,
+            {
+              mode: "commission",
+              serviceTypeId: input.serviceTypeId,
+              serviceAmount: input.serviceAmount,
+              shopCommissionRate: rate,
+              hours: input.hours != null && input.hours >= 0 ? input.hours : undefined,
+            }
+          );
         }
-
-        const hourlyPay = parseFloat(serviceType.hourlyPay as any);
-
-        return createWorkRecord(
-          ctx.user.id,
-          input.workerId,
-          input.shopId,
-          input.serviceTypeId,
-          input.workDate,
-          input.hours,
-          input.tips,
-          hourlyPay,
-          input.notes
-        );
       }),
 
     update: protectedProcedure
@@ -323,7 +397,13 @@ export const appRouter = router({
           serviceTypeId: z.number().optional(),
           workDate: z.date().optional(),
           hours: z.number().positive().optional(),
-          tips: z.number().nonnegative().optional(),
+          serviceAmount: z.number().positive().optional(),
+          lineItems: z
+            .array(z.object({ serviceTypeId: z.number(), hours: z.number().positive() }))
+            .min(1)
+            .optional(),
+          cashTips: z.number().nonnegative().optional(),
+          cardTips: z.number().nonnegative().optional(),
           notes: z.string().optional(),
         })
       )
@@ -337,26 +417,44 @@ export const appRouter = router({
           await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
         }
 
-        let hourlyPay = parseFloat(record.hourlyPay as any);
-
-        if (input.serviceTypeId) {
-          const serviceType = await getServiceTypeById(input.serviceTypeId);
-          if (!serviceType) {
-            throw new TRPCError({ code: "NOT_FOUND", message: "服務類型不存在" });
-          }
-          hourlyPay = parseFloat(serviceType.hourlyPay as any);
-        }
-
-        return updateWorkRecord(input.recordId, ctx.user.id, {
+        const updates: Parameters<typeof updateWorkRecord>[2] = {
           workerId: input.workerId,
           shopId: input.shopId,
           serviceTypeId: input.serviceTypeId,
           workDate: input.workDate,
           hours: input.hours,
-          tips: input.tips,
-          hourlyPay,
+          serviceAmount: input.serviceAmount,
+          lineItems: input.lineItems,
+          cashTips: input.cashTips,
+          cardTips: input.cardTips,
           notes: input.notes,
-        });
+        };
+
+        const isCommissionRecord = record.serviceAmount != null && parseFloat(record.serviceAmount as any) > 0;
+
+        if (input.serviceAmount != null) {
+          const shopId = input.shopId ?? record.shopId;
+          const shop = await getShopByIdForUser(shopId, ctx.user.id);
+          if (!shop) throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
+          const rate = parseFloat((shop as any).shopCommissionRate as any);
+          if (isNaN(rate) || rate < 0 || rate > 1) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "店家抽成比例設定有誤" });
+          }
+          updates.shopCommissionRate = rate;
+        } else if (input.lineItems != null && input.lineItems.length > 0 && !isCommissionRecord) {
+          for (const item of input.lineItems) {
+            const st = await getServiceTypeById(item.serviceTypeId);
+            if (!st) throw new TRPCError({ code: "NOT_FOUND", message: `服務類型 ${item.serviceTypeId} 不存在` });
+          }
+        } else if (input.hours != null && !isCommissionRecord && !input.lineItems) {
+          let hourlyPay = input.serviceTypeId
+            ? parseFloat((await getServiceTypeById(input.serviceTypeId))?.hourlyPay as any)
+            : parseFloat(record.hourlyPay as any);
+          if (isNaN(hourlyPay)) hourlyPay = 0;
+          updates.hourlyPay = hourlyPay;
+        }
+
+        return updateWorkRecord(input.recordId, ctx.user.id, updates);
       }),
 
     delete: protectedProcedure
