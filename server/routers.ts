@@ -26,9 +26,11 @@ import {
   updateWorkRecord,
   deleteWorkRecord,
   getMonthlyStats,
+  getStatsForDateRange,
   getNotificationSettings,
   upsertNotificationSettings,
 } from "./db";
+import { getSettlementPeriods } from "./_core/settlementUtils";
 import { TRPCError } from "@trpc/server";
 
 export const appRouter = router({
@@ -119,6 +121,10 @@ export const appRouter = router({
           description: z.string().optional(),
           payType: z.enum(["hourly", "commission"]).default("hourly"),
           shopCommissionRate: z.number().min(0).max(1).optional(),
+          settlementType: z.enum(["fixed_dates", "month_end", "cycle"]).nullable().optional(),
+          settlementDates: z.array(z.number().min(1).max(31)).optional(),
+          settlementAnchorDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+          settlementCycleDays: z.number().min(1).max(31).nullable().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -129,13 +135,35 @@ export const appRouter = router({
             message: "抽成制請設定店家抽成比例（0～1）",
           });
         }
+        if (input.settlementType === "fixed_dates" && (!input.settlementDates || input.settlementDates.length === 0)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "固定日期模式請設定結算日期（1～31）",
+          });
+        }
+        if (input.settlementType === "cycle" && (!input.settlementAnchorDate || !input.settlementCycleDays)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "週期制請設定錨點日期與週期天數",
+          });
+        }
+        const settlement =
+          input.settlementType != null
+            ? {
+                settlementType: input.settlementType,
+                settlementDates: input.settlementType === "fixed_dates" ? input.settlementDates ?? null : null,
+                settlementAnchorDate: input.settlementType === "cycle" ? input.settlementAnchorDate ?? null : null,
+                settlementCycleDays: input.settlementType === "cycle" ? input.settlementCycleDays ?? null : null,
+              }
+            : undefined;
         return createShop(
           ctx.user.id,
           input.workerId,
           input.name,
           input.description,
           input.payType,
-          input.shopCommissionRate
+          input.shopCommissionRate,
+          settlement
         );
       }),
 
@@ -149,6 +177,10 @@ export const appRouter = router({
           isActive: z.boolean().optional(),
           payType: z.enum(["hourly", "commission"]).optional(),
           shopCommissionRate: z.number().min(0).max(1).optional(),
+          settlementType: z.enum(["fixed_dates", "month_end", "cycle"]).nullable().optional(),
+          settlementDates: z.array(z.number().min(1).max(31)).nullable().optional(),
+          settlementAnchorDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+          settlementCycleDays: z.number().min(1).max(31).nullable().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -164,14 +196,47 @@ export const appRouter = router({
             message: "抽成制請設定店家抽成比例（0～1）",
           });
         }
+        if (input.settlementType === "fixed_dates" && (input.settlementDates == null || input.settlementDates.length === 0)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "固定日期模式請設定結算日期（1～31）",
+          });
+        }
+        if (input.settlementType === "cycle" && (input.settlementAnchorDate == null || input.settlementCycleDays == null)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "週期制請設定錨點日期與週期天數",
+          });
+        }
 
-        return updateShop(input.shopId, ctx.user.id, input.workerId, {
+        const updates: Parameters<typeof updateShop>[3] = {
           name: input.name,
           description: input.description,
           isActive: input.isActive,
           payType: input.payType,
           shopCommissionRate: input.shopCommissionRate,
-        });
+          settlementType: input.settlementType,
+          settlementDates: input.settlementDates,
+          settlementAnchorDate: input.settlementAnchorDate,
+          settlementCycleDays: input.settlementCycleDays,
+        };
+        if (input.settlementType !== undefined) {
+          if (input.settlementType === null) {
+            updates.settlementDates = null;
+            updates.settlementAnchorDate = null;
+            updates.settlementCycleDays = null;
+          } else if (input.settlementType === "fixed_dates") {
+            updates.settlementAnchorDate = null;
+            updates.settlementCycleDays = null;
+          } else if (input.settlementType === "month_end") {
+            updates.settlementDates = null;
+            updates.settlementAnchorDate = null;
+            updates.settlementCycleDays = null;
+          } else if (input.settlementType === "cycle") {
+            updates.settlementDates = null;
+          }
+        }
+        return updateShop(input.shopId, ctx.user.id, input.workerId, updates);
       }),
 
     delete: protectedProcedure
@@ -482,6 +547,69 @@ export const appRouter = router({
       )
       .query(({ ctx, input }) => {
         return getMonthlyStats(ctx.user.id, input.year, input.month, input.workerId);
+      }),
+
+    settlementPeriods: protectedProcedure
+      .input(
+        z.object({
+          shopId: z.number(),
+          workerId: z.number(),
+          year: z.number(),
+        })
+      )
+      .query(async ({ ctx, input }) => {
+        await assertWorkerBelongsToUser(input.workerId, ctx.user.id);
+        const shop = await getShopById(input.shopId, ctx.user.id, input.workerId);
+        if (!shop) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "店家不存在" });
+        }
+        const config = {
+          settlementType: (shop as any).settlementType ?? null,
+          settlementDates: (shop as any).settlementDates ?? null,
+          settlementAnchorDate: (shop as any).settlementAnchorDate ?? null,
+          settlementCycleDays: (shop as any).settlementCycleDays != null ? Number((shop as any).settlementCycleDays) : null,
+        };
+        const periods = getSettlementPeriods(config, input.year);
+        const formatLocalDate = (d: Date) => {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${y}-${m}-${day}`;
+        };
+        return periods.map((p) => ({
+          startDate: formatLocalDate(p.startDate),
+          endDate: formatLocalDate(p.endDate),
+          label: p.label,
+        }));
+      }),
+
+    byDateRange: protectedProcedure
+      .input(
+        z.object({
+          workerId: z.number().optional(),
+          startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          shopId: z.number().optional(),
+        })
+      )
+      .query(({ ctx, input }) => {
+        // 使用本地日期解析，避免 new Date("YYYY-MM-DD") 在 UTC 解析造成的時區偏移
+        const parseDateOnly = (s: string) => {
+          const [y, m, d] = s.split("-").map(Number);
+          return new Date(y, m - 1, d);
+        };
+        const startDate = parseDateOnly(input.startDate);
+        const endDate = parseDateOnly(input.endDate);
+        if (startDate > endDate) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "開始日期不可晚於結束日期" });
+        }
+        return getStatsForDateRange(
+          ctx.user.id,
+          startDate,
+          endDate,
+          input.workerId,
+          input.shopId
+        );
       }),
   }),
 

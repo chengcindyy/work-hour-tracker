@@ -58,6 +58,10 @@ export const shops = pgTable("shops", {
   description: text("description"), // 店家描述
   payType: varchar("payType", { length: 32 }).notNull().default("hourly"), // 計薪方式：hourly | commission
   shopCommissionRate: numeric("shopCommissionRate", { precision: 5, scale: 4 }), // 店家抽成比例 0~1，僅抽成制使用
+  settlementType: varchar("settlementType", { length: 32 }), // "fixed_dates" | "month_end" | "cycle" | null
+  settlementDates: varchar("settlementDates", { length: 64 }), // JSON 陣列，如 "[8,23]"
+  settlementAnchorDate: date("settlementAnchorDate"), // 週期制錨點日
+  settlementCycleDays: integer("settlementCycleDays"), // 週期天數，如 14
   isActive: boolean("isActive").default(true).notNull(), // 是否啟用
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),

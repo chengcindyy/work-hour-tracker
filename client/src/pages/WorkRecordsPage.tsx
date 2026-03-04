@@ -20,8 +20,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Edit2, Trash2, Plus, Clock, Minus } from "lucide-react";
+import { Edit2, Trash2, Plus, Clock, Minus, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
+import { useLocation } from "wouter";
+import { useIsMobile } from "@/hooks/useMobile";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 export default function WorkRecordsPage() {
   const now = new Date();
@@ -50,6 +57,8 @@ export default function WorkRecordsPage() {
   });
 
   const { selectedWorkerId } = useWorkerSelection();
+  const [, navigate] = useLocation();
+  const isMobile = useIsMobile();
 
   const { data: shops } = trpc.shops.list.useQuery(
     { workerId: selectedWorkerId! },
@@ -301,89 +310,118 @@ export default function WorkRecordsPage() {
     }).format(value);
   };
 
-  return (
-    <div className="space-y-6">
-      {/* 標題和按鈕 */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-foreground">工時登記</h1>
-        <Button
-          onClick={() => handleOpenDialog()}
-          className="bg-primary text-primary-foreground hover:bg-primary/90"
+  const filterContent = (
+    <div className="flex flex-col md:flex-row md:flex-wrap gap-4 md:items-end">
+      <div className="form-group flex-1 min-w-0">
+        <label className="form-label">店家</label>
+        <Select
+          value={filterShopId || "all"}
+          onValueChange={(v) => setFilterShopId(v === "all" ? "" : v)}
         >
-          <Plus className="w-4 h-4 mr-2" />
-          新增工時
+          <SelectTrigger className="w-full md:w-[180px]">
+            <SelectValue placeholder="全部店家" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部店家</SelectItem>
+            {shops?.map((shop) => (
+              <SelectItem key={shop.id} value={shop.id.toString()}>
+                {shop.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="form-group flex-1 min-w-0">
+        <label className="form-label">開始日期</label>
+        <Input
+          type="date"
+          value={filterStartDate}
+          onChange={(e) => setFilterStartDate(e.target.value)}
+          className="w-full md:w-[150px]"
+        />
+      </div>
+      <div className="form-group flex-1 min-w-0">
+        <label className="form-label">結束日期</label>
+        <Input
+          type="date"
+          value={filterEndDate}
+          onChange={(e) => setFilterEndDate(e.target.value)}
+          className="w-full md:w-[150px]"
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={setDateRangeThisYear}>
+          今年
+        </Button>
+        <Button variant="outline" size="sm" onClick={setDateRangeLastMonth}>
+          上個月
+        </Button>
+        <Button variant="outline" size="sm" onClick={setDateRangeNextMonth}>
+          下個月
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setFilterShopId("");
+            setFilterStartDate(format(new Date(currentYear, currentMonth - 1, 1), "yyyy-MM-dd"));
+            setFilterEndDate(format(new Date(currentYear, currentMonth, 0), "yyyy-MM-dd"));
+          }}
+        >
+          清除篩選
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4 md:space-y-6 max-w-2xl">
+      {/* 標題和按鈕 */}
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl md:text-3xl font-bold text-foreground truncate">
+          工時登記
+        </h1>
+        <Button
+          onClick={() => navigate("/dashboard")}
+          className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
+        >
+          <Plus className="w-4 h-4 md:mr-2" />
+          <span className="hidden md:inline">新增工時</span>
         </Button>
       </div>
 
-      {/* 篩選區 */}
-      <Card className="p-4">
-        <div className="flex gap-4 items-end flex-wrap">
-          <div className="form-group">
-            <label className="form-label">店家</label>
-            <Select
-              value={filterShopId || "all"}
-              onValueChange={(v) => setFilterShopId(v === "all" ? "" : v)}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="全部店家" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部店家</SelectItem>
-                {shops?.map((shop) => (
-                  <SelectItem key={shop.id} value={shop.id.toString()}>
-                    {shop.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">開始日期</label>
-            <Input
-              type="date"
-              value={filterStartDate}
-              onChange={(e) => setFilterStartDate(e.target.value)}
-              className="w-[150px]"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">結束日期</label>
-            <Input
-              type="date"
-              value={filterEndDate}
-              onChange={(e) => setFilterEndDate(e.target.value)}
-              className="w-[150px]"
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={setDateRangeThisYear}>
-              今年
-            </Button>
-            <Button variant="outline" size="sm" onClick={setDateRangeLastMonth}>
-              上個月
-            </Button>
-            <Button variant="outline" size="sm" onClick={setDateRangeNextMonth}>
-              下個月
-            </Button>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setFilterShopId("");
-              setFilterStartDate(format(new Date(currentYear, currentMonth - 1, 1), "yyyy-MM-dd"));
-              setFilterEndDate(format(new Date(currentYear, currentMonth, 0), "yyyy-MM-dd"));
-            }}
-          >
-            清除篩選
-          </Button>
-        </div>
-        {filteredRecords.length > 0 && (
-          <p className="text-sm text-muted-foreground mt-3">
-            共 {filteredRecords.length} 筆紀錄
-          </p>
-        )}
-      </Card>
+      {/* 篩選區：手機版收合，桌面版展開 */}
+      {isMobile ? (
+        <Collapsible>
+          <Card className="p-3">
+            <CollapsibleTrigger asChild>
+              <button className="flex items-center justify-between w-full text-left">
+                <span className="font-medium text-foreground">
+                  篩選
+                  {filteredRecords.length > 0 && (
+                    <span className="text-muted-foreground font-normal ml-2">
+                      （共 {filteredRecords.length} 筆）
+                    </span>
+                  )}
+                </span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="pt-4 space-y-4">{filterContent}</div>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      ) : (
+        <Card className="p-4">
+          {filterContent}
+          {filteredRecords.length > 0 && (
+            <p className="text-sm text-muted-foreground mt-3">
+              共 {filteredRecords.length} 筆紀錄
+            </p>
+          )}
+        </Card>
+      )}
 
       {/* 工時紀錄列表 */}
       {isLoading ? (
@@ -413,48 +451,51 @@ export default function WorkRecordsPage() {
               isCommissionRecord || !rec.lineItems?.length
                 ? (serviceTypes?.find((st) => st.id === record.serviceTypeId)?.name ?? "服務")
                 : rec.lineItems.map((li) => li.serviceTypeName ?? "項目").join("、");
+            const cash = parseFloat((record as any).cashTips as any) || 0;
+            const cardTips = parseFloat((record as any).cardTips as any) || 0;
+            const hasTips = cash > 0 || cardTips > 0;
             return (
               <Card key={record.id} className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="font-semibold text-foreground">
-                      {shop?.name}
+                {/* 手機版：垂直堆疊；桌面版：橫向排列 */}
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    {/* 店家 + 金額：手機上並排，金額突出 */}
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="font-semibold text-foreground truncate">
+                        {shop?.name}
+                      </div>
+                      <div className="font-semibold text-primary text-lg shrink-0">
+                        {formatCurrency(parseFloat(record.totalEarnings as any))}
+                      </div>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {(record.workDate as string) || ""} • {serviceLabel}
+                      {(record.workDate as string) || ""} · {serviceLabel}
                     </div>
-                    <div className="text-sm text-muted-foreground mt-1">
+                    <div className="text-sm text-muted-foreground">
                       {detailText}
                     </div>
+                    {hasTips && (
+                      <div className="text-sm text-accent">
+                        小費：現金 {formatCurrency(cash)} / 刷卡 {formatCurrency(cardTips)}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-right mr-4">
-                    <div className="font-semibold text-primary">
-                      {formatCurrency(parseFloat(record.totalEarnings as any))}
-                    </div>
-                    {(() => {
-                      const cash = parseFloat((record as any).cashTips as any) || 0;
-                      const card = parseFloat((record as any).cardTips as any) || 0;
-                      const total = cash + card;
-                      return total > 0 ? (
-                        <div className="text-sm text-accent">
-                          小費：現金 {formatCurrency(cash)} / 刷卡 {formatCurrency(card)}
-                        </div>
-                      ) : null;
-                    })()}
-                  </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 shrink-0 sm:pt-1">
                     <Button
                       variant="outline"
-                      size="sm"
+                      size={isMobile ? "default" : "sm"}
+                      className="min-h-10 min-w-10 sm:min-w-0"
                       onClick={() => handleOpenDialog(record)}
+                      aria-label="編輯"
                     >
                       <Edit2 className="w-4 h-4" />
                     </Button>
                     <Button
                       variant="outline"
-                      size="sm"
+                      size={isMobile ? "default" : "sm"}
+                      className="min-h-10 min-w-10 sm:min-w-0 text-destructive hover:text-destructive"
                       onClick={() => handleDelete(record.id)}
-                      className="text-destructive hover:text-destructive"
+                      aria-label="刪除"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -465,7 +506,7 @@ export default function WorkRecordsPage() {
           })}
         </div>
       ) : (
-        <Card className="p-12">
+        <Card className="p-8 md:p-12">
           <div className="empty-state">
             <Clock className="empty-state-icon" />
             <div className="empty-state-title">
@@ -484,7 +525,7 @@ export default function WorkRecordsPage() {
                   ? (setFilterShopId(""),
                     setFilterStartDate(format(new Date(currentYear, currentMonth - 1, 1), "yyyy-MM-dd")),
                     setFilterEndDate(format(new Date(currentYear, currentMonth, 0), "yyyy-MM-dd")))
-                  : handleOpenDialog()
+                  : navigate("/dashboard")
               }
               className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
             >

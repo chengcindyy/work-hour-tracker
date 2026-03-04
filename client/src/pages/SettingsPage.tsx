@@ -152,14 +152,14 @@ export default function SettingsPage() {
       <h1 className="text-3xl font-bold text-foreground">設定</h1>
 
       {/* 成員管理 */}
-      <Card className="p-6 space-y-6">
-        <div className="flex items-center justify-between gap-3">
+      <Card className="p-4 sm:p-6 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-3">
-            <UserPlus className="w-6 h-6 text-primary" />
+            <UserPlus className="w-6 h-6 text-primary shrink-0" />
             <h2 className="text-2xl font-semibold text-foreground">成員管理</h2>
           </div>
           {workers.length > 0 && selectedWorkerId != null && (
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-muted-foreground truncate">
               目前選擇：{" "}
               <span className="font-medium text-foreground">
                 {workers.find(w => w.id === selectedWorkerId)?.name ?? "-"}
@@ -182,12 +182,12 @@ export default function SettingsPage() {
                   return (
                     <div
                       key={worker.id}
-                      className="flex items-center justify-between gap-3 p-2 rounded-md border border-border/60"
+                      className="flex flex-col gap-3 p-3 rounded-md border border-border/60 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                     >
                       {isEditing ? (
                         <>
                           <Input
-                            className="max-w-[200px]"
+                            className="w-full sm:max-w-[200px]"
                             value={editingWorkerName}
                             onChange={e => setEditingWorkerName(e.target.value)}
                             placeholder="成員名稱"
@@ -203,7 +203,7 @@ export default function SettingsPage() {
                             }}
                             autoFocus
                           />
-                          <div className="flex items-center gap-1">
+                          <div className="flex gap-2">
                             <Button
                               size="sm"
                               variant="default"
@@ -230,13 +230,13 @@ export default function SettingsPage() {
                         </>
                       ) : (
                         <>
-                          <div>
-                            <div className="font-medium text-foreground">{worker.name}</div>
+                          <div className="min-w-0">
+                            <div className="font-medium text-foreground truncate">{worker.name}</div>
                             {selectedWorkerId === worker.id && (
                               <div className="text-xs text-primary mt-1">目前選擇的成員</div>
                             )}
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap gap-2 shrink-0">
                             <Button
                               size="sm"
                               variant={selectedWorkerId === worker.id ? "default" : "outline"}

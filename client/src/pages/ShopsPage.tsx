@@ -25,6 +25,10 @@ export default function ShopsPage() {
     description: "",
     payType: "hourly" as "hourly" | "commission",
     shopCommissionRatePct: "",
+    settlementType: null as null | "fixed_dates" | "month_end" | "cycle",
+    settlementDatesInput: "",
+    settlementAnchorDate: "",
+    settlementCycleDays: "",
   });
 
   const [ratesDialogShopId, setRatesDialogShopId] = useState<number | null>(null);
@@ -65,15 +69,36 @@ export default function ShopsPage() {
       setEditingShop(shop);
       const payType = (shop.payType as string) === "commission" ? "commission" : "hourly";
       const rate = shop.shopCommissionRate != null ? parseFloat(shop.shopCommissionRate as string) : 0;
+      const st = shop.settlementType as string | null;
+      let settlementDatesInput = "";
+      if (shop.settlementDates) {
+        try {
+          const arr = JSON.parse(shop.settlementDates) as number[];
+          if (Array.isArray(arr)) settlementDatesInput = arr.sort((a, b) => a - b).join(", ");
+        } catch {}
+      }
       setFormData({
         name: shop.name,
         description: shop.description || "",
         payType,
         shopCommissionRatePct: payType === "commission" && rate > 0 ? (rate * 100).toString() : "",
+        settlementType: st === "fixed_dates" || st === "month_end" || st === "cycle" ? st : null,
+        settlementDatesInput,
+        settlementAnchorDate: (shop.settlementAnchorDate as string) || "",
+        settlementCycleDays: shop.settlementCycleDays != null ? String(shop.settlementCycleDays) : "",
       });
     } else {
       setEditingShop(null);
-      setFormData({ name: "", description: "", payType: "hourly", shopCommissionRatePct: "" });
+      setFormData({
+        name: "",
+        description: "",
+        payType: "hourly",
+        shopCommissionRatePct: "",
+        settlementType: null,
+        settlementDatesInput: "",
+        settlementAnchorDate: "",
+        settlementCycleDays: "",
+      });
     }
     setIsDialogOpen(true);
   };
@@ -81,7 +106,16 @@ export default function ShopsPage() {
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
     setEditingShop(null);
-    setFormData({ name: "", description: "", payType: "hourly", shopCommissionRatePct: "" });
+    setFormData({
+      name: "",
+      description: "",
+      payType: "hourly",
+      shopCommissionRatePct: "",
+      settlementType: null,
+      settlementDatesInput: "",
+      settlementAnchorDate: "",
+      settlementCycleDays: "",
+    });
   };
 
   const handleSubmit = async () => {
@@ -96,6 +130,28 @@ export default function ShopsPage() {
         return;
       }
     }
+    if (formData.settlementType === "fixed_dates") {
+      const dates = formData.settlementDatesInput
+        .split(/[,，\s]+/)
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => !isNaN(n) && n >= 1 && n <= 31);
+      const unique = Array.from(new Set(dates)).sort((a, b) => a - b);
+      if (unique.length === 0) {
+        toast.error("固定日期模式請輸入結算日（1～31，可多個以逗號分隔）");
+        return;
+      }
+    }
+    if (formData.settlementType === "cycle") {
+      if (!formData.settlementAnchorDate) {
+        toast.error("週期制請選擇錨點結算日");
+        return;
+      }
+      const days = parseInt(formData.settlementCycleDays, 10);
+      if (isNaN(days) || days < 1 || days > 31) {
+        toast.error("週期天數請輸入 1～31");
+        return;
+      }
+    }
     if (selectedWorkerId == null) {
       toast.error("請先選擇成員");
       return;
@@ -104,24 +160,58 @@ export default function ShopsPage() {
       formData.payType === "commission"
         ? parseFloat(formData.shopCommissionRatePct) / 100
         : undefined;
+
+    const uniqueDates =
+      formData.settlementType === "fixed_dates"
+        ? Array.from(new Set(
+            formData.settlementDatesInput
+              .split(/[,，\s]+/)
+              .map((s) => parseInt(s.trim(), 10))
+              .filter((n) => !isNaN(n) && n >= 1 && n <= 31)
+          )).sort((a, b) => a - b)
+        : undefined;
+
+    const settlementPayload: Record<string, unknown> = {
+      settlementType: formData.settlementType,
+    };
+    if (formData.settlementType === "fixed_dates") {
+      settlementPayload.settlementDates = uniqueDates;
+      settlementPayload.settlementAnchorDate = null;
+      settlementPayload.settlementCycleDays = null;
+    } else if (formData.settlementType === "month_end") {
+      settlementPayload.settlementDates = null;
+      settlementPayload.settlementAnchorDate = null;
+      settlementPayload.settlementCycleDays = null;
+    } else if (formData.settlementType === "cycle") {
+      settlementPayload.settlementDates = null;
+      settlementPayload.settlementAnchorDate = formData.settlementAnchorDate;
+      settlementPayload.settlementCycleDays = parseInt(formData.settlementCycleDays, 10);
+    } else {
+      settlementPayload.settlementDates = null;
+      settlementPayload.settlementAnchorDate = null;
+      settlementPayload.settlementCycleDays = null;
+    }
+
+    const basePayload = {
+      name: formData.name,
+      description: formData.description,
+      payType: formData.payType,
+      shopCommissionRate,
+      ...settlementPayload,
+    };
+
     try {
       if (editingShop) {
         await updateShopMutation.mutateAsync({
           shopId: editingShop.id,
           workerId: selectedWorkerId,
-          name: formData.name,
-          description: formData.description,
-          payType: formData.payType,
-          shopCommissionRate,
+          ...basePayload,
         });
         toast.success("店家已更新");
       } else {
         await createShopMutation.mutateAsync({
           workerId: selectedWorkerId,
-          name: formData.name,
-          description: formData.description,
-          payType: formData.payType,
-          shopCommissionRate,
+          ...basePayload,
         });
         toast.success("店家已新增");
       }
@@ -252,11 +342,29 @@ export default function ShopsPage() {
                 <div className="flex items-center gap-3">
                   <Store className="w-8 h-8 text-primary opacity-60" />
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-semibold text-foreground">{shop.name}</h3>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                         {(shop as any).payType === "commission" ? "抽成制" : "時薪制"}
                       </span>
+                      {(shop as any).settlementType && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                          {(() => {
+                            const st = (shop as any).settlementType;
+                            if (st === "month_end") return "結算：月底";
+                            if (st === "fixed_dates" && (shop as any).settlementDates) {
+                              try {
+                                const arr = JSON.parse((shop as any).settlementDates) as number[];
+                                return `結算：每月 ${arr?.join("、") ?? ""} 號`;
+                              } catch {}
+                              return "結算：固定日";
+                            }
+                            if (st === "cycle" && (shop as any).settlementCycleDays)
+                              return `結算：每 ${(shop as any).settlementCycleDays} 天`;
+                            return "結算已設定";
+                          })()}
+                        </span>
+                      )}
                     </div>
                     {shop.description && (
                       <p className="text-sm text-muted-foreground mt-1">
@@ -395,6 +503,79 @@ export default function ShopsPage() {
                 </div>
               </div>
             )}
+
+            <div className="form-group">
+              <label className="form-label">結算設定</label>
+              <RadioGroup
+                value={formData.settlementType ?? "none"}
+                onValueChange={(v) =>
+                  setFormData({
+                    ...formData,
+                    settlementType: v === "none" ? null : (v as "fixed_dates" | "month_end" | "cycle"),
+                    settlementDatesInput: v === "fixed_dates" ? formData.settlementDatesInput : "",
+                    settlementAnchorDate: v === "cycle" ? formData.settlementAnchorDate : "",
+                    settlementCycleDays: v === "cycle" ? formData.settlementCycleDays : "",
+                  })
+                }
+                className="flex flex-col gap-2"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="none" id="settlement-none" />
+                  <Label htmlFor="settlement-none" className="cursor-pointer">無</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="fixed_dates" id="settlement-fixed" />
+                  <Label htmlFor="settlement-fixed" className="cursor-pointer">固定每月幾號</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="month_end" id="settlement-month-end" />
+                  <Label htmlFor="settlement-month-end" className="cursor-pointer">每月月底</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="cycle" id="settlement-cycle" />
+                  <Label htmlFor="settlement-cycle" className="cursor-pointer">週期制（每 N 天）</Label>
+                </div>
+              </RadioGroup>
+              {formData.settlementType === "fixed_dates" && (
+                <Input
+                  className="mt-2"
+                  placeholder="例如：8, 23（每月 8 號、23 號結算）"
+                  value={formData.settlementDatesInput}
+                  onChange={(e) =>
+                    setFormData({ ...formData, settlementDatesInput: e.target.value })
+                  }
+                />
+              )}
+              {formData.settlementType === "cycle" && (
+                <div className="mt-2 space-y-2">
+                  <div>
+                    <label className="text-sm text-muted-foreground">錨點結算日</label>
+                    <Input
+                      type="date"
+                      className="mt-1"
+                      value={formData.settlementAnchorDate}
+                      onChange={(e) =>
+                        setFormData({ ...formData, settlementAnchorDate: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">週期天數</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="31"
+                      placeholder="例如：14（每兩週）"
+                      className="mt-1"
+                      value={formData.settlementCycleDays}
+                      onChange={(e) =>
+                        setFormData({ ...formData, settlementCycleDays: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="flex gap-2 pt-4">
               <Button

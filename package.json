@@ -14,7 +14,8 @@
     "db:migrate-add-workers": "node scripts/run-add-workers-migration.mjs",
     "db:migrate-add-service-types-worker": "node scripts/run-add-service-types-worker-migration.mjs",
     "db:migrate-add-commission": "node scripts/run-add-commission-migration.mjs",
-    "db:migrate-add-line-items": "node scripts/run-add-line-items-migration.mjs"
+    "db:migrate-add-line-items": "node scripts/run-add-line-items-migration.mjs",
+    "db:migrate-add-settlement": "node scripts/run-add-settlement-migration.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.12",

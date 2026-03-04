@@ -262,13 +262,21 @@ export async function getShopByIdForUser(shopId: number, userId: number): Promis
   return result.length > 0 ? result[0] : undefined;
 }
 
+export interface CreateShopSettlement {
+  settlementType?: "fixed_dates" | "month_end" | "cycle" | null;
+  settlementDates?: number[] | null;
+  settlementAnchorDate?: string | null;
+  settlementCycleDays?: number | null;
+}
+
 export async function createShop(
   userId: number,
   workerId: number,
   name: string,
   description?: string,
   payType: "hourly" | "commission" = "hourly",
-  shopCommissionRate?: number
+  shopCommissionRate?: number,
+  settlement?: CreateShopSettlement
 ): Promise<Shop> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -283,6 +291,15 @@ export async function createShop(
   if (payType === "commission" && shopCommissionRate != null) {
     values.shopCommissionRate = shopCommissionRate.toString();
   }
+  if (settlement) {
+    if (settlement.settlementType != null) values.settlementType = settlement.settlementType;
+    if (settlement.settlementDates != null)
+      values.settlementDates = JSON.stringify(settlement.settlementDates);
+    if (settlement.settlementAnchorDate != null)
+      values.settlementAnchorDate = settlement.settlementAnchorDate;
+    if (settlement.settlementCycleDays != null)
+      values.settlementCycleDays = settlement.settlementCycleDays;
+  }
 
   const result = await db
     .insert(shops)
@@ -294,11 +311,28 @@ export async function createShop(
   return result[0];
 }
 
+export interface UpdateShopSettlement {
+  settlementType?: "fixed_dates" | "month_end" | "cycle" | null;
+  settlementDates?: number[] | null;
+  settlementAnchorDate?: string | null;
+  settlementCycleDays?: number | null;
+}
+
 export async function updateShop(
   shopId: number,
   userId: number,
   workerId: number,
-  updates: { name?: string; description?: string; isActive?: boolean; payType?: "hourly" | "commission"; shopCommissionRate?: number }
+  updates: {
+    name?: string;
+    description?: string;
+    isActive?: boolean;
+    payType?: "hourly" | "commission";
+    shopCommissionRate?: number;
+    settlementType?: "fixed_dates" | "month_end" | "cycle" | null;
+    settlementDates?: number[] | null;
+    settlementAnchorDate?: string | null;
+    settlementCycleDays?: number | null;
+  }
 ): Promise<Shop> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -306,6 +340,10 @@ export async function updateShop(
   const setValues: Record<string, unknown> = { ...updates };
   if (updates.shopCommissionRate !== undefined) {
     setValues.shopCommissionRate = updates.shopCommissionRate.toString();
+  }
+  if (updates.settlementDates !== undefined) {
+    setValues.settlementDates =
+      updates.settlementDates == null ? null : JSON.stringify(updates.settlementDates);
   }
 
   const result = await db
@@ -757,34 +795,37 @@ export async function deleteWorkRecord(recordId: number, userId: number): Promis
 
 // ============ 統計相關查詢 ============
 
-export async function getMonthlyStats(
+export type StatsResult = {
+  totalHours: number;
+  totalEarnings: number;
+  totalTips: number;
+  totalCashTips: number;
+  totalCardTips: number;
+  totalShopCommission: number;
+  byShop: Record<
+    number,
+    { shopName: string; hours: number; earnings: number; tips: number; cashTips: number; cardTips: number; shopCommission: number }
+  >;
+};
+
+async function aggregateWorkRecordsToStats(
   userId: number,
-  year: number,
-  month: number,
-  workerId?: number
-) {
-  const db = await getDb();
-  if (!db) return null;
-
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 0);
-
-  const records = (await getUserWorkRecords(userId, workerId, startDate, endDate)) as WorkRecordWithLineItems[];
-
-  const stats = {
+  records: WorkRecordWithLineItems[],
+  shopIdFilter?: number
+): Promise<StatsResult> {
+  const stats: StatsResult = {
     totalHours: 0,
     totalEarnings: 0,
     totalTips: 0,
     totalCashTips: 0,
     totalCardTips: 0,
     totalShopCommission: 0,
-    byShop: {} as Record<
-      number,
-      { shopName: string; hours: number; earnings: number; tips: number; cashTips: number; cardTips: number; shopCommission: number }
-    >,
+    byShop: {},
   };
 
   for (const record of records) {
+    if (shopIdFilter != null && record.shopId !== shopIdFilter) continue;
+
     let hours = 0;
     if (record.lineItems && record.lineItems.length > 0) {
       hours = record.lineItems.reduce((sum, li) => sum + li.hours, 0);
@@ -829,6 +870,35 @@ export async function getMonthlyStats(
   }
   
   return stats;
+}
+
+export async function getMonthlyStats(
+  userId: number,
+  year: number,
+  month: number,
+  workerId?: number
+): Promise<StatsResult | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0);
+  const records = (await getUserWorkRecords(userId, workerId, startDate, endDate)) as WorkRecordWithLineItems[];
+  return aggregateWorkRecordsToStats(userId, records);
+}
+
+export async function getStatsForDateRange(
+  userId: number,
+  startDate: Date,
+  endDate: Date,
+  workerId?: number,
+  shopId?: number
+): Promise<StatsResult | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const records = (await getUserWorkRecords(userId, workerId, startDate, endDate)) as WorkRecordWithLineItems[];
+  return aggregateWorkRecordsToStats(userId, records, shopId);
 }
 
 // ============ 推播通知設定相關查詢 ============

@@ -10,21 +10,55 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Download, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
 export default function StatsPage() {
   const now = new Date();
+  const [viewMode, setViewMode] = useState<"monthly" | "settlement">("monthly");
   const [selectedYear, setSelectedYear] = useState(now.getFullYear().toString());
   const [selectedMonth, setSelectedMonth] = useState((now.getMonth() + 1).toString());
+  const [selectedShopId, setSelectedShopId] = useState<number | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<{ startDate: string; endDate: string; label: string } | null>(null);
   const { selectedWorkerId } = useWorkerSelection();
 
-  const { data: stats } = trpc.stats.monthlyStats.useQuery({
-    year: parseInt(selectedYear),
-    month: parseInt(selectedMonth),
-    workerId: selectedWorkerId ?? undefined,
-  });
+  const { data: shops } = trpc.shops.list.useQuery(
+    { workerId: selectedWorkerId! },
+    { enabled: !!selectedWorkerId }
+  );
+  const shopsWithSettlement = shops?.filter((s: any) => s.settlementType) ?? [];
+
+  const { data: monthlyStats } = trpc.stats.monthlyStats.useQuery(
+    {
+      year: parseInt(selectedYear),
+      month: parseInt(selectedMonth),
+      workerId: selectedWorkerId ?? undefined,
+    },
+    { enabled: viewMode === "monthly" && !!selectedWorkerId }
+  );
+
+  const { data: settlementPeriods } = trpc.stats.settlementPeriods.useQuery(
+    {
+      shopId: selectedShopId!,
+      workerId: selectedWorkerId!,
+      year: parseInt(selectedYear),
+    },
+    { enabled: viewMode === "settlement" && !!selectedShopId && !!selectedWorkerId }
+  );
+
+  const { data: settlementStats } = trpc.stats.byDateRange.useQuery(
+    {
+      workerId: selectedWorkerId ?? undefined,
+      startDate: selectedPeriod?.startDate ?? "",
+      endDate: selectedPeriod?.endDate ?? "",
+      shopId: selectedShopId ?? undefined,
+    },
+    { enabled: viewMode === "settlement" && !!selectedPeriod && !!selectedWorkerId }
+  );
+
+  const stats = viewMode === "monthly" ? monthlyStats : settlementStats;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("zh-TW", {
@@ -35,7 +69,7 @@ export default function StatsPage() {
   };
 
   const formatHours = (value: number) => {
-    return value.toFixed(1);
+    return value.toFixed(2);
   };
 
   // 準備圖表數據
@@ -61,8 +95,10 @@ export default function StatsPage() {
     }
 
     try {
-      let csv = "月份統計報表\n";
-      csv += `${selectedYear}年${selectedMonth}月\n\n`;
+      const title = viewMode === "monthly"
+        ? `月份統計報表\n${selectedYear}年${selectedMonth}月`
+        : `結算區間統計報表\n${selectedPeriod?.label ?? ""} (${selectedPeriod?.startDate ?? ""} ~ ${selectedPeriod?.endDate ?? ""})`;
+      let csv = title + "\n\n";
       csv += "總計\n";
       csv += `總工時,${formatHours(stats.totalHours)}\n`;
       csv += `總收入,${formatCurrency(stats.totalEarnings)}\n`;
@@ -89,7 +125,9 @@ export default function StatsPage() {
       link.setAttribute("href", url);
       link.setAttribute(
         "download",
-        `stats-${selectedYear}-${selectedMonth.padStart(2, "0")}.csv`
+        viewMode === "monthly"
+          ? `stats-${selectedYear}-${selectedMonth.padStart(2, "0")}.csv`
+          : `stats-settlement-${selectedPeriod?.startDate ?? ""}-${selectedPeriod?.endDate ?? ""}.csv`
       );
       link.click();
       toast.success("報表已匯出");
@@ -116,6 +154,14 @@ export default function StatsPage() {
         </Button>
       </div>
 
+      {/* 檢視模式切換 */}
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "monthly" | "settlement")}>
+        <TabsList>
+          <TabsTrigger value="monthly">依月份</TabsTrigger>
+          <TabsTrigger value="settlement">依結算區間</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       {/* 時間選擇 */}
       <Card className="p-4">
         <div className="flex gap-4 items-end flex-wrap">
@@ -135,22 +181,81 @@ export default function StatsPage() {
             </Select>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">月份</label>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {months.map((month) => (
-                  <SelectItem key={month} value={month.toString()}>
-                    {month}月
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {viewMode === "monthly" && (
+            <div className="form-group">
+              <label className="form-label">月份</label>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {months.map((month) => (
+                    <SelectItem key={month} value={month.toString()}>
+                      {month}月
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {viewMode === "settlement" && (
+            <>
+              <div className="form-group">
+                <label className="form-label">店家</label>
+                <Select
+                  value={selectedShopId?.toString() ?? ""}
+                  onValueChange={(v) => {
+                    setSelectedShopId(v ? parseInt(v, 10) : null);
+                    setSelectedPeriod(null);
+                  }}
+                >
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="選擇有結算設定的店家" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {shopsWithSettlement.map((shop: any) => (
+                      <SelectItem key={shop.id} value={shop.id.toString()}>
+                        {shop.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">結算區間</label>
+                <Select
+                  value={selectedPeriod ? `${selectedPeriod.startDate}_${selectedPeriod.endDate}` : ""}
+                  onValueChange={(v) => {
+                    const p = settlementPeriods?.find(
+                      (x) => `${x.startDate}_${x.endDate}` === v
+                    );
+                    setSelectedPeriod(p ?? null);
+                  }}
+                >
+                  <SelectTrigger className="w-56">
+                    <SelectValue placeholder="選擇結算區間" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {settlementPeriods?.map((p) => (
+                      <SelectItem
+                        key={`${p.startDate}_${p.endDate}`}
+                        value={`${p.startDate}_${p.endDate}`}
+                      >
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
         </div>
+        {viewMode === "settlement" && shopsWithSettlement.length === 0 && selectedWorkerId && (
+          <p className="text-sm text-muted-foreground mt-2">
+            尚無店家設定結算日，請至店家管理設定結算方式。
+          </p>
+        )}
       </Card>
 
       {/* 統計卡片 */}
@@ -187,7 +292,9 @@ export default function StatsPage() {
                 <div className="stat-value">
                   {formatCurrency((stats as any).totalShopCommission)}
                 </div>
-                <div className="text-xs text-muted-foreground">本月應繳</div>
+                <div className="text-xs text-muted-foreground">
+                  {viewMode === "monthly" ? "本月應繳" : "本區間應繳"}
+                </div>
               </div>
             )}
 
