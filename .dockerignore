@@ -1,0 +1,35 @@
+# 依賴
+node_modules
+.pnpm-store
+
+# 建置產物（會在 Docker 內重新 build）
+dist
+
+# 開發 / 除錯
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.log
+.manus-logs
+
+# IDE
+.vscode
+.idea
+
+# 測試
+coverage
+*.test.ts
+*.test.tsx
+*.spec.ts
+
+# 文件 / 參考
+*.md
+!README.md
+references
+DEPLOYMENT_GUIDE.md
+
+# 其他
+amplify
+.cursor

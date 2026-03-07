@@ -1,0 +1,29 @@
+# Fly.io 部署設定
+# 部署前請先在 Fly.io 設定 secrets：
+#   fly secrets set DATABASE_URL="postgresql://..."
+#   fly secrets set JWT_SECRET="..."
+#   fly secrets set VAPID_PUBLIC_KEY="..."
+#   fly secrets set VAPID_PRIVATE_KEY="..."
+
+app = "work-hour-tracker"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/"
+    timeout = "5s"
