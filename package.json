@@ -15,7 +15,9 @@
     "db:migrate-add-service-types-worker": "node scripts/run-add-service-types-worker-migration.mjs",
     "db:migrate-add-commission": "node scripts/run-add-commission-migration.mjs",
     "db:migrate-add-line-items": "node scripts/run-add-line-items-migration.mjs",
-    "db:migrate-add-settlement": "node scripts/run-add-settlement-migration.mjs"
+    "db:migrate-add-settlement": "node scripts/run-add-settlement-migration.mjs",
+    "db:migrate-add-push-subscriptions": "node scripts/run-add-push-subscriptions-migration.mjs",
+    "generate-vapid": "node scripts/generate-vapid-keys.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.12",
@@ -85,6 +87,7 @@
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^1.1.2",
+    "web-push": "^3.6.7",
     "wouter": "3.7.1",
     "zod": "^4.1.12"
   },

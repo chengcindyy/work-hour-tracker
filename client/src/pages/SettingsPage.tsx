@@ -23,6 +23,9 @@ export default function SettingsPage() {
   const { selectedWorkerId, workers, setSelectedWorkerId } = useWorkerSelection();
   const { data: notificationSettings } = trpc.notifications.getSettings.useQuery();
   const updateNotificationsMutation = trpc.notifications.updateSettings.useMutation();
+  const savePushSubscriptionMutation = trpc.notifications.savePushSubscription.useMutation();
+  const sendTestPushMutation = trpc.notifications.sendTestPush.useMutation();
+  const { data: vapidData } = trpc.notifications.getVapidPublicKey.useQuery();
   const { data: workRecords } = trpc.workRecords.list.useQuery(
     {
       workerId: selectedWorkerId ?? undefined,
@@ -63,6 +66,58 @@ export default function SettingsPage() {
     );
   };
 
+  const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  };
+
+  const subscribeToPush = async (): Promise<boolean> => {
+    if (!vapidData?.publicKey) {
+      toast.error("推播服務尚未設定（請確認 .env 已設定 VAPID 金鑰並重啟伺服器）");
+      return false;
+    }
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+      toast.error("此瀏覽器不支援推播通知");
+      return false;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      toast.error("已拒絕推播權限，請在瀏覽器設定中允許通知");
+      return false;
+    }
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const applicationServerKey = urlBase64ToUint8Array(vapidData.publicKey);
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+      const subscription = sub.toJSON();
+      const p256dh = subscription.keys?.p256dh;
+      const auth = subscription.keys?.auth;
+      if (subscription.endpoint && p256dh && auth) {
+        await savePushSubscriptionMutation.mutateAsync({
+          endpoint: subscription.endpoint,
+          keys: { p256dh: p256dh, auth },
+        });
+        return true;
+      }
+      toast.error("訂閱格式異常，請重試或換瀏覽器");
+      return false;
+    } catch (err) {
+      console.error("[Push] Subscribe failed:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`訂閱失敗：${msg}`);
+      return false;
+    }
+  };
+
   const handleSaveNotifications = async () => {
     try {
       await updateNotificationsMutation.mutateAsync({
@@ -71,7 +126,16 @@ export default function SettingsPage() {
         reminderDays,
       });
       utils.notifications.getSettings.invalidate();
-      toast.success("推播設定已保存");
+      if (isEnabled) {
+        const ok = await subscribeToPush();
+        if (ok) {
+          toast.success("推播設定已保存，可點「發送測試推播」驗證");
+        } else {
+          toast.warning("推播設定已保存，但訂閱未完成，請點「訂閱推播」重試");
+        }
+      } else {
+        toast.success("推播設定已保存");
+      }
     } catch (error) {
       toast.error("保存失敗，請重試");
     }
@@ -338,6 +402,13 @@ export default function SettingsPage() {
           <h2 className="text-2xl font-semibold text-foreground">推播通知</h2>
         </div>
 
+        <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
+          <div className="font-medium mb-1">iPhone / iOS 使用者請注意</div>
+          <p className="text-muted-foreground dark:text-amber-200/90">
+            推播通知需先將本 App「加入主畫面」後才能使用。請在 Safari 中點選分享按鈕 →「加入主畫面」，之後從主畫面圖示開啟 App 即可接收推播。
+          </p>
+        </div>
+
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -382,14 +453,54 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <Button
-                onClick={handleSaveNotifications}
-                disabled={updateNotificationsMutation.isPending}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                保存設定
-              </Button>
+              {!vapidData?.publicKey && (
+                <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+                  <strong>「訂閱推播」與「發送測試推播」按鈕無法點擊？</strong>
+                  <p className="mt-1">
+                    請確認 .env 已設定 VAPID_PUBLIC_KEY 和 VAPID_PRIVATE_KEY（執行 <code className="bg-amber-200/50 px-1 rounded">pnpm run generate-vapid</code> 產生），並<strong>重啟 dev 伺服器</strong>（Ctrl+C 後重新執行 pnpm dev）。
+                  </p>
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
+                <Button
+                  onClick={handleSaveNotifications}
+                  disabled={updateNotificationsMutation.isPending}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  保存設定
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    const ok = await subscribeToPush();
+                    if (ok) toast.success("訂閱成功，可點「發送測試推播」驗證");
+                  }}
+                  disabled={savePushSubscriptionMutation.isPending || !vapidData?.publicKey}
+                >
+                  {savePushSubscriptionMutation.isPending ? "訂閱中..." : "訂閱推播"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const result = await sendTestPushMutation.mutateAsync();
+                      if (result.sent > 0) {
+                        toast.success("測試推播已發送，請稍候確認是否收到");
+                      } else if (result.failed > 0) {
+                        toast.error("推播發送失敗，請點「訂閱推播」重新訂閱");
+                      } else {
+                        toast.error("尚無推播訂閱，請先點「訂閱推播」完成訂閱");
+                      }
+                    } catch {
+                      toast.error("推播發送失敗，請確認 VAPID 金鑰已設定");
+                    }
+                  }}
+                  disabled={sendTestPushMutation.isPending || !vapidData?.publicKey}
+                >
+                  {sendTestPushMutation.isPending ? "發送中..." : "發送測試推播"}
+                </Button>
+              </div>
             </>
           )}
         </div>

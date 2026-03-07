@@ -7,4 +7,8 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  /** VAPID 公鑰，用於前端 PushManager.subscribe */
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? "",
+  /** VAPID 私鑰，用於後端 web-push 發送 */
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY ?? "",
 };

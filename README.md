@@ -79,6 +79,21 @@ pnpm run db:migrate-add-workers
 
 會建立 `workers` 表、在 `workRecords` 加上 `workerId`，並為每位使用者建立預設成員、把既有工時掛到該成員。完成後重啟 dev server，再到設定頁新增成員即可。
 
+### 推播通知（本地測試）
+
+1. 產生 VAPID 金鑰：
+   ```bash
+   pnpm run generate-vapid
+   ```
+2. 將輸出複製到 `.env`（建立 `VAPID_PUBLIC_KEY` 和 `VAPID_PRIVATE_KEY`）
+3. 執行遷移：
+   ```bash
+   pnpm run db:migrate-add-push-subscriptions
+   ```
+4. 重啟 `pnpm dev`
+5. 開啟設定頁 → 啟用推播 → 點「保存設定」→ 允許通知
+6. 點「發送測試推播」驗證是否收到
+
 ## 🧭 Roadmap
 
 Improve Work Record UX (auto-select service type when only one option)

@@ -29,8 +29,10 @@ import {
   getStatsForDateRange,
   getNotificationSettings,
   upsertNotificationSettings,
+  savePushSubscription,
 } from "./db";
 import { getSettlementPeriods } from "./_core/settlementUtils";
+import { ENV } from "./_core/env";
 import { TRPCError } from "@trpc/server";
 
 export const appRouter = router({
@@ -619,6 +621,24 @@ export const appRouter = router({
       return getNotificationSettings(ctx.user.id);
     }),
 
+    getVapidPublicKey: protectedProcedure.query(() => {
+      return { publicKey: ENV.vapidPublicKey || null };
+    }),
+
+    savePushSubscription: protectedProcedure
+      .input(
+        z.object({
+          endpoint: z.string().url(),
+          keys: z.object({
+            p256dh: z.string(),
+            auth: z.string(),
+          }),
+        })
+      )
+      .mutation(({ ctx, input }) => {
+        return savePushSubscription(ctx.user.id, input);
+      }),
+
     updateSettings: protectedProcedure
       .input(
         z.object({
@@ -635,6 +655,17 @@ export const appRouter = router({
           input.reminderDays
         );
       }),
+
+    /** 發送測試推播（用於本地驗證） */
+    sendTestPush: protectedProcedure.mutation(async ({ ctx }) => {
+      const { sendPushToUser } = await import("./_core/pushService");
+      const result = await sendPushToUser(ctx.user.id, {
+        title: "工時登記系統",
+        body: "這是測試推播，若收到表示設定成功！",
+        tag: `test-${Date.now()}`, // 每次唯一 tag，避免被前一個通知取代
+      });
+      return result;
+    }),
   }),
 });
 

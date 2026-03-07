@@ -12,6 +12,10 @@ self.addEventListener("install", (event) => {
       return cache.addAll(urlsToCache);
     })
   );
+  // 開發環境立即啟用新 SW，不需等所有分頁關閉
+  if (self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1") {
+    self.skipWaiting();
+  }
 });
 
 // 激活 Service Worker
@@ -25,13 +29,26 @@ self.addEventListener("activate", (event) => {
           }
         })
       );
+    }).then(() => {
+      // 開發環境立即接管頁面
+      if (self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1") {
+        return self.clients.claim();
+      }
     })
   );
 });
 
+// 開發環境（localhost）：不攔截，讓請求直接打到伺服器，避免快取舊的 HMR WebSocket 設定
+const isDev = self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1";
+
 // 攔截請求
 self.addEventListener("fetch", (event) => {
   const { request } = event;
+
+  // 開發環境不攔截，避免快取導致 HMR WebSocket 連到錯誤 port
+  if (isDev) {
+    return;
+  }
 
   // 跳過非 GET 請求
   if (request.method !== "GET") {
@@ -90,16 +107,29 @@ self.addEventListener("fetch", (event) => {
 
 // 推播通知
 self.addEventListener("push", (event) => {
+  let title = "工時登記系統";
+  let body = "別忘了登記今天的工時喔！";
+  let tag = "work-hour-reminder";
+  if (event.data) {
+    try {
+      const data = event.data.json();
+      if (data.title) title = data.title;
+      if (data.body) body = data.body;
+      if (data.tag) tag = data.tag;
+    } catch {
+      body = event.data.text() || body;
+    }
+  }
   const options = {
-    body: event.data ? event.data.text() : "工時登記提醒",
+    body,
     icon: "/favicon.ico",
     badge: "/favicon.ico",
-    tag: "work-hour-reminder",
+    tag,
     requireInteraction: false,
   };
 
   event.waitUntil(
-    self.registration.showNotification("工時登記系統", options)
+    self.registration.showNotification(title, options)
   );
 });
 
@@ -109,10 +139,11 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: "window" }).then((clientList) => {
-      // 檢查是否已有打開的窗口
+      // 檢查是否已有打開的窗口（client.url 為完整 URL，如 http://localhost:3000/ 或 /settings）
+      const origin = self.location.origin;
       for (let i = 0; i < clientList.length; i++) {
         const client = clientList[i];
-        if (client.url === "/" && "focus" in client) {
+        if (client.url.startsWith(origin) && "focus" in client) {
           return client.focus();
         }
       }

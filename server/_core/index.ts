@@ -9,6 +9,8 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { ensureDevUser } from "./seedDevUser.js";
 import { ensureDefaultWorkersForExistingUsers } from "./seedDefaultWorkers";
+import { startPushReminderScheduler } from "./pushScheduler";
+import { isPushConfigured } from "./pushService";
 import { serveStatic, setupVite } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -51,15 +53,15 @@ async function startServer() {
       createContext,
     })
   );
+  const preferredPort = parseInt(process.env.PORT || "3000");
+  const port = await findAvailablePort(preferredPort);
+
   // use Vite for non-production (default) and static files for production
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
-    await setupVite(app, server);
+    await setupVite(app, server, port);
   }
-
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
 
   if (port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
@@ -67,6 +69,11 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    if (isPushConfigured()) {
+      startPushReminderScheduler();
+    } else {
+      console.log("[Push] VAPID keys not set, push reminders disabled");
+    }
   });
 }
 

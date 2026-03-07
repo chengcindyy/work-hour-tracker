@@ -9,6 +9,7 @@ import {
   workRecords,
   workRecordLineItems,
   notificationSettings,
+  pushSubscriptions,
   workers,
   type Shop,
   type ServiceType,
@@ -954,4 +955,87 @@ export async function upsertNotificationSettings(
     if (!result[0]) throw new Error("Failed to create notification settings");
     return result[0];
   }
+}
+
+export async function savePushSubscription(
+  userId: number,
+  subscription: { endpoint: string; keys: { p256dh: string; auth: string } }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existing = await db
+    .select()
+    .from(pushSubscriptions)
+    .where(
+      and(
+        eq(pushSubscriptions.userId, userId),
+        eq(pushSubscriptions.endpoint, subscription.endpoint)
+      )
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db
+      .update(pushSubscriptions)
+      .set({
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth,
+      })
+      .where(eq(pushSubscriptions.id, existing[0].id));
+  } else {
+    await db.insert(pushSubscriptions).values({
+      userId,
+      endpoint: subscription.endpoint,
+      p256dh: subscription.keys.p256dh,
+      auth: subscription.keys.auth,
+    });
+  }
+}
+
+export async function getPushSubscriptionsByUserId(
+  userId: number
+): Promise<{ endpoint: string; p256dh: string; auth: string }[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select()
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.userId, userId));
+
+  return rows.map((r) => ({
+    endpoint: r.endpoint,
+    p256dh: r.p256dh,
+    auth: r.auth,
+  }));
+}
+
+/** 取得當前應發送提醒的使用者（isEnabled、reminderTime、reminderDays 符合） */
+export async function getUsersToNotifyForReminder(
+  currentHour: number,
+  currentMinute: number,
+  dayOfWeek: number
+): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const settings = await db.select().from(notificationSettings);
+
+  const userIds: number[] = [];
+  for (const s of settings) {
+    if (!s.isEnabled) continue;
+    const [h, m] = s.reminderTime.split(":").map(Number);
+    if (h !== currentHour || m !== currentMinute) continue;
+    let days: number[];
+    try {
+      days = JSON.parse(s.reminderDays);
+    } catch {
+      continue;
+    }
+    if (days.includes(dayOfWeek)) {
+      userIds.push(s.userId);
+    }
+  }
+  return userIds;
 }
