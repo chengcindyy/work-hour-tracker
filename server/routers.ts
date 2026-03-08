@@ -545,10 +545,11 @@ export const appRouter = router({
           workerId: z.number().optional(),
           year: z.number(),
           month: z.number().min(1).max(12),
+          shopIds: z.array(z.number()).optional(),
         })
       )
       .query(({ ctx, input }) => {
-        return getMonthlyStats(ctx.user.id, input.year, input.month, input.workerId);
+        return getMonthlyStats(ctx.user.id, input.year, input.month, input.workerId, input.shopIds);
       }),
 
     settlementPeriods: protectedProcedure
@@ -591,7 +592,7 @@ export const appRouter = router({
           workerId: z.number().optional(),
           startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
           endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-          shopId: z.number().optional(),
+          shopIds: z.array(z.number()).optional(),
         })
       )
       .query(({ ctx, input }) => {
@@ -610,7 +611,7 @@ export const appRouter = router({
           startDate,
           endDate,
           input.workerId,
-          input.shopId
+          input.shopIds
         );
       }),
   }),

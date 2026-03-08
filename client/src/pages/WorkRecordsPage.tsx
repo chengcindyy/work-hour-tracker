@@ -311,57 +311,62 @@ export default function WorkRecordsPage() {
   };
 
   const filterContent = (
-    <div className="flex flex-col md:flex-row md:flex-wrap gap-4 md:items-end">
-      <div className="form-group flex-1 min-w-0">
-        <label className="form-label">店家</label>
-        <Select
-          value={filterShopId || "all"}
-          onValueChange={(v) => setFilterShopId(v === "all" ? "" : v)}
-        >
-          <SelectTrigger className="w-full md:w-[180px]">
-            <SelectValue placeholder="全部店家" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部店家</SelectItem>
-            {shops?.map((shop) => (
-              <SelectItem key={shop.id} value={shop.id.toString()}>
-                {shop.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    <div className="flex flex-col gap-4 min-w-0">
+      {/* 第一列：店家與日期篩選 */}
+      <div className="flex flex-col sm:flex-row flex-wrap gap-4 sm:items-end">
+        <div className="form-group flex-1 min-w-0 sm:min-w-[140px]">
+          <label className="form-label">店家</label>
+          <Select
+            value={filterShopId || "all"}
+            onValueChange={(v) => setFilterShopId(v === "all" ? "" : v)}
+          >
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="全部店家" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部店家</SelectItem>
+              {shops?.map((shop) => (
+                <SelectItem key={shop.id} value={shop.id.toString()}>
+                  {shop.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="form-group flex-1 min-w-0 sm:min-w-[120px]">
+          <label className="form-label">開始日期</label>
+          <Input
+            type="date"
+            value={filterStartDate}
+            onChange={(e) => setFilterStartDate(e.target.value)}
+            className="w-full sm:w-[150px]"
+          />
+        </div>
+        <div className="form-group flex-1 min-w-0 sm:min-w-[120px]">
+          <label className="form-label">結束日期</label>
+          <Input
+            type="date"
+            value={filterEndDate}
+            onChange={(e) => setFilterEndDate(e.target.value)}
+            className="w-full sm:w-[150px]"
+          />
+        </div>
       </div>
-      <div className="form-group flex-1 min-w-0">
-        <label className="form-label">開始日期</label>
-        <Input
-          type="date"
-          value={filterStartDate}
-          onChange={(e) => setFilterStartDate(e.target.value)}
-          className="w-full md:w-[150px]"
-        />
-      </div>
-      <div className="form-group flex-1 min-w-0">
-        <label className="form-label">結束日期</label>
-        <Input
-          type="date"
-          value={filterEndDate}
-          onChange={(e) => setFilterEndDate(e.target.value)}
-          className="w-full md:w-[150px]"
-        />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={setDateRangeThisYear}>
+      {/* 第二列：快速日期按鈕與清除篩選 */}
+      <div className="flex flex-wrap gap-2 shrink-0">
+        <Button variant="outline" size="sm" onClick={setDateRangeThisYear} className="shrink-0 whitespace-nowrap">
           今年
         </Button>
-        <Button variant="outline" size="sm" onClick={setDateRangeLastMonth}>
+        <Button variant="outline" size="sm" onClick={setDateRangeLastMonth} className="shrink-0 whitespace-nowrap">
           上個月
         </Button>
-        <Button variant="outline" size="sm" onClick={setDateRangeNextMonth}>
+        <Button variant="outline" size="sm" onClick={setDateRangeNextMonth} className="shrink-0 whitespace-nowrap">
           下個月
         </Button>
         <Button
           variant="ghost"
           size="sm"
+          className="shrink-0 whitespace-nowrap"
           onClick={() => {
             setFilterShopId("");
             setFilterStartDate(format(new Date(currentYear, currentMonth - 1, 1), "yyyy-MM-dd"));

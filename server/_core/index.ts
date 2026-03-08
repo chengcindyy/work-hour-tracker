@@ -11,7 +11,7 @@ import { ensureDevUser } from "./seedDevUser.js";
 import { ensureDefaultWorkersForExistingUsers } from "./seedDefaultWorkers";
 import { startPushReminderScheduler } from "./pushScheduler";
 import { isPushConfigured } from "./pushService";
-import { serveStatic, setupVite } from "./vite";
+import { serveStatic } from "./serveStatic";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -37,6 +37,7 @@ async function startServer() {
   await ensureDefaultWorkersForExistingUsers();
 
   const app = express();
+  app.set("trust proxy", 1);
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
@@ -60,6 +61,7 @@ async function startServer() {
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
+    const { setupVite } = await import("./vite");
     await setupVite(app, server, port);
   }
 

@@ -1,8 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useWorkerSelection } from "@/_core/hooks/useWorkers";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -12,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { Download, TrendingUp } from "lucide-react";
+import { Download, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 export default function StatsPage() {
@@ -20,32 +26,40 @@ export default function StatsPage() {
   const [viewMode, setViewMode] = useState<"monthly" | "settlement">("monthly");
   const [selectedYear, setSelectedYear] = useState(now.getFullYear().toString());
   const [selectedMonth, setSelectedMonth] = useState((now.getMonth() + 1).toString());
-  const [selectedShopId, setSelectedShopId] = useState<number | null>(null);
+  const [selectedShopIds, setSelectedShopIds] = useState<number[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<{ startDate: string; endDate: string; label: string } | null>(null);
   const { selectedWorkerId } = useWorkerSelection();
+
+  // 切換成員時重置店家篩選與結算區間
+  useEffect(() => {
+    setSelectedShopIds([]);
+    setSelectedPeriod(null);
+  }, [selectedWorkerId]);
 
   const { data: shops } = trpc.shops.list.useQuery(
     { workerId: selectedWorkerId! },
     { enabled: !!selectedWorkerId }
   );
   const shopsWithSettlement = shops?.filter((s: any) => s.settlementType) ?? [];
+  const shopListForFilter = viewMode === "monthly" ? (shops ?? []) : shopsWithSettlement;
 
   const { data: monthlyStats } = trpc.stats.monthlyStats.useQuery(
     {
       year: parseInt(selectedYear),
       month: parseInt(selectedMonth),
       workerId: selectedWorkerId ?? undefined,
+      shopIds: selectedShopIds.length > 0 ? selectedShopIds : undefined,
     },
     { enabled: viewMode === "monthly" && !!selectedWorkerId }
   );
 
   const { data: settlementPeriods } = trpc.stats.settlementPeriods.useQuery(
     {
-      shopId: selectedShopId!,
+      shopId: selectedShopIds[0]!,
       workerId: selectedWorkerId!,
       year: parseInt(selectedYear),
     },
-    { enabled: viewMode === "settlement" && !!selectedShopId && !!selectedWorkerId }
+    { enabled: viewMode === "settlement" && selectedShopIds.length > 0 && !!selectedWorkerId }
   );
 
   const { data: settlementStats } = trpc.stats.byDateRange.useQuery(
@@ -53,7 +67,7 @@ export default function StatsPage() {
       workerId: selectedWorkerId ?? undefined,
       startDate: selectedPeriod?.startDate ?? "",
       endDate: selectedPeriod?.endDate ?? "",
-      shopId: selectedShopId ?? undefined,
+      shopIds: selectedShopIds.length > 0 ? selectedShopIds : undefined,
     },
     { enabled: viewMode === "settlement" && !!selectedPeriod && !!selectedWorkerId }
   );
@@ -199,61 +213,108 @@ export default function StatsPage() {
             </div>
           )}
 
+          {/* 店家多選：依月份用全部店家，依結算區間用有結算設定的店家 */}
+          <div className="form-group">
+            <label className="form-label">店家</label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-48 justify-between font-normal"
+                >
+                  <span className="truncate">
+                    {selectedShopIds.length === 0
+                      ? viewMode === "settlement"
+                        ? "選擇有結算設定的店家"
+                        : "全部店家"
+                      : selectedShopIds.length === 1
+                        ? shopListForFilter.find((s: any) => s.id === selectedShopIds[0])?.name ?? "已選 1 家"
+                        : `已選 ${selectedShopIds.length} 家`}
+                  </span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-2" align="start">
+                <div className="max-h-60 overflow-y-auto space-y-2">
+                  {shopListForFilter.map((shop: any) => (
+                    <label
+                      key={shop.id}
+                      className="flex items-center gap-2 cursor-pointer rounded-md px-2 py-1.5 hover:bg-accent"
+                    >
+                      <Checkbox
+                        checked={selectedShopIds.includes(shop.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedPeriod(null);
+                          setSelectedShopIds((prev) =>
+                            checked
+                              ? [...prev, shop.id]
+                              : prev.filter((id) => id !== shop.id)
+                          );
+                        }}
+                      />
+                      <span className="text-sm truncate">{shop.name}</span>
+                    </label>
+                  ))}
+                </div>
+                {selectedShopIds.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full mt-2"
+                    onClick={() => {
+                      setSelectedShopIds([]);
+                      setSelectedPeriod(null);
+                    }}
+                  >
+                    清除選擇
+                  </Button>
+                )}
+              </PopoverContent>
+            </Popover>
+          </div>
+
           {viewMode === "settlement" && (
-            <>
-              <div className="form-group">
-                <label className="form-label">店家</label>
-                <Select
-                  value={selectedShopId?.toString() ?? ""}
-                  onValueChange={(v) => {
-                    setSelectedShopId(v ? parseInt(v, 10) : null);
-                    setSelectedPeriod(null);
-                  }}
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="選擇有結算設定的店家" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {shopsWithSettlement.map((shop: any) => (
-                      <SelectItem key={shop.id} value={shop.id.toString()}>
-                        {shop.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">結算區間</label>
-                <Select
-                  value={selectedPeriod ? `${selectedPeriod.startDate}_${selectedPeriod.endDate}` : ""}
-                  onValueChange={(v) => {
-                    const p = settlementPeriods?.find(
-                      (x) => `${x.startDate}_${x.endDate}` === v
-                    );
-                    setSelectedPeriod(p ?? null);
-                  }}
-                >
-                  <SelectTrigger className="w-56">
-                    <SelectValue placeholder="選擇結算區間" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {settlementPeriods?.map((p) => (
-                      <SelectItem
-                        key={`${p.startDate}_${p.endDate}`}
-                        value={`${p.startDate}_${p.endDate}`}
-                      >
-                        {p.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
+            <div className="form-group">
+              <label className="form-label">結算區間</label>
+              <Select
+                value={selectedPeriod ? `${selectedPeriod.startDate}_${selectedPeriod.endDate}` : ""}
+                onValueChange={(v) => {
+                  const p = settlementPeriods?.find(
+                    (x) => `${x.startDate}_${x.endDate}` === v
+                  );
+                  setSelectedPeriod(p ?? null);
+                }}
+                disabled={selectedShopIds.length === 0}
+              >
+                <SelectTrigger className="w-56">
+                  <SelectValue
+                    placeholder={
+                      selectedShopIds.length === 0
+                        ? "請先選擇店家"
+                        : "選擇結算區間"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {settlementPeriods?.map((p) => (
+                    <SelectItem
+                      key={`${p.startDate}_${p.endDate}`}
+                      value={`${p.startDate}_${p.endDate}`}
+                    >
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
         </div>
-        {viewMode === "settlement" && shopsWithSettlement.length === 0 && selectedWorkerId && (
+        {viewMode === "settlement" && selectedWorkerId && (shopsWithSettlement.length === 0 || selectedShopIds.length === 0) && (
           <p className="text-sm text-muted-foreground mt-2">
-            尚無店家設定結算日，請至店家管理設定結算方式。
+            {shopsWithSettlement.length === 0
+              ? "尚無店家設定結算日，請至店家管理設定結算方式。"
+              : "請選擇至少一家店家以查看結算區間。"}
           </p>
         )}
       </Card>

@@ -1,29 +1,34 @@
-# Fly.io 部署設定
-# 部署前請先在 Fly.io 設定 secrets：
-#   fly secrets set DATABASE_URL="postgresql://..."
-#   fly secrets set JWT_SECRET="..."
-#   fly secrets set VAPID_PUBLIC_KEY="..."
-#   fly secrets set VAPID_PRIVATE_KEY="..."
+# fly.toml app configuration file generated for work-hour-tracker on 2026-03-06T23:32:15-08:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "work-hour-tracker"
+app = 'work-hour-tracker'
+primary_region = 'ord'
 
 [build]
+  dockerfile = "Dockerfile"
 
 [env]
-  NODE_ENV = "production"
-  PORT = "3000"
+  NODE_ENV = 'production'
+  PORT = '3000'
 
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
+  processes = ['app']
 
   [[http_service.checks]]
-    grace_period = "10s"
-    interval = "30s"
-    method = "GET"
-    path = "/"
-    timeout = "5s"
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/'
+
+[[vm]]
+  memory = '1gb'
+  cpus = 1
+  memory_mb = 1024

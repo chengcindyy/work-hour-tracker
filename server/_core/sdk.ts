@@ -30,10 +30,13 @@ const GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserI
 
 class OAuthService {
   constructor(private client: ReturnType<typeof axios.create>) {
-    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
-    if (!ENV.oAuthServerUrl) {
-      console.error(
-        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
+    if (ENV.oAuthServerUrl) {
+      console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
+    }
+    // OAUTH_SERVER_URL only needed for Manus; Google OAuth uses GOOGLE_CLIENT_ID
+    if (!ENV.oAuthServerUrl && !ENV.googleClientId) {
+      console.warn(
+        "[OAuth] No OAuth configured. Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET for Google login, or OAUTH_SERVER_URL for Manus."
       );
     }
   }
@@ -114,7 +117,51 @@ class SDKServer {
   }
 
   /**
-   * Exchange OAuth authorization code for access token
+   * Exchange Google OAuth authorization code for access token
+   */
+  async exchangeGoogleCodeForToken(
+    code: string,
+    redirectUri: string
+  ): Promise<{ accessToken: string }> {
+    const { data } = await axios.post(
+      "https://oauth2.googleapis.com/token",
+      new URLSearchParams({
+        code,
+        client_id: ENV.googleClientId,
+        client_secret: ENV.googleClientSecret,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+      {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: AXIOS_TIMEOUT_MS,
+      }
+    );
+    return { accessToken: data.access_token };
+  }
+
+  /**
+   * Get user info from Google OAuth access token
+   */
+  async getGoogleUserInfo(
+    accessToken: string
+  ): Promise<{ openId: string; name: string; email: string | null }> {
+    const { data } = await axios.get(
+      "https://www.googleapis.com/oauth2/v2/userinfo",
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: AXIOS_TIMEOUT_MS,
+      }
+    );
+    return {
+      openId: data.id,
+      name: data.name ?? "",
+      email: data.email ?? null,
+    };
+  }
+
+  /**
+   * Exchange OAuth authorization code for access token (Manus - legacy)
    * @example
    * const tokenResponse = await sdk.exchangeCodeForToken(code, state);
    */
@@ -273,26 +320,9 @@ class SDKServer {
     const signedInAt = new Date();
     let user = await db.getUserByOpenId(sessionUserId);
 
-    // If user not in DB, sync from OAuth server automatically
+    // If user not in DB (e.g. DB was reset), require re-login
     if (!user) {
-      try {
-        const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
-        await db.upsertUser({
-          openId: userInfo.openId,
-          name: userInfo.name || null,
-          email: userInfo.email ?? null,
-          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-          lastSignedIn: signedInAt,
-        });
-        user = await db.getUserByOpenId(userInfo.openId);
-      } catch (error) {
-        console.error("[Auth] Failed to sync user from OAuth:", error);
-        throw ForbiddenError("Failed to sync user info");
-      }
-    }
-
-    if (!user) {
-      throw ForbiddenError("User not found");
+      throw ForbiddenError("User not found - please sign in again");
     }
 
     await db.upsertUser({

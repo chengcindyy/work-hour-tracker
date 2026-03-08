@@ -812,7 +812,7 @@ export type StatsResult = {
 async function aggregateWorkRecordsToStats(
   userId: number,
   records: WorkRecordWithLineItems[],
-  shopIdFilter?: number
+  shopIdsFilter?: number[]
 ): Promise<StatsResult> {
   const stats: StatsResult = {
     totalHours: 0,
@@ -824,8 +824,12 @@ async function aggregateWorkRecordsToStats(
     byShop: {},
   };
 
+  const shopIdsSet = shopIdsFilter != null && shopIdsFilter.length > 0
+    ? new Set(shopIdsFilter)
+    : null;
+
   for (const record of records) {
-    if (shopIdFilter != null && record.shopId !== shopIdFilter) continue;
+    if (shopIdsSet != null && !shopIdsSet.has(record.shopId)) continue;
 
     let hours = 0;
     if (record.lineItems && record.lineItems.length > 0) {
@@ -877,7 +881,8 @@ export async function getMonthlyStats(
   userId: number,
   year: number,
   month: number,
-  workerId?: number
+  workerId?: number,
+  shopIds?: number[]
 ): Promise<StatsResult | null> {
   const db = await getDb();
   if (!db) return null;
@@ -885,7 +890,7 @@ export async function getMonthlyStats(
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 0);
   const records = (await getUserWorkRecords(userId, workerId, startDate, endDate)) as WorkRecordWithLineItems[];
-  return aggregateWorkRecordsToStats(userId, records);
+  return aggregateWorkRecordsToStats(userId, records, shopIds);
 }
 
 export async function getStatsForDateRange(
@@ -893,13 +898,13 @@ export async function getStatsForDateRange(
   startDate: Date,
   endDate: Date,
   workerId?: number,
-  shopId?: number
+  shopIds?: number[]
 ): Promise<StatsResult | null> {
   const db = await getDb();
   if (!db) return null;
 
   const records = (await getUserWorkRecords(userId, workerId, startDate, endDate)) as WorkRecordWithLineItems[];
-  return aggregateWorkRecordsToStats(userId, records, shopId);
+  return aggregateWorkRecordsToStats(userId, records, shopIds);
 }
 
 // ============ 推播通知設定相關查詢 ============

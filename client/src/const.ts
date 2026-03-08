@@ -1,17 +1,6 @@
 export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
-// Generate login URL at runtime so redirect URI reflects the current origin.
+// 使用 server 的 /api/oauth/login，由 server 負責組出正確的 OAuth 導向 URL
 export const getLoginUrl = () => {
-  const oauthPortalUrl = "http://localhost:3000";
-  const appId = "work-hour-tracker";
-  const redirectUri = `${window.location.origin}/api/oauth/callback`;
-  const state = btoa(redirectUri);
-
-  const url = new URL(`${oauthPortalUrl}/app-auth`);
-  url.searchParams.set("appId", appId);
-  url.searchParams.set("redirectUri", redirectUri);
-  url.searchParams.set("state", state);
-  url.searchParams.set("type", "signIn");
-
-  return url.toString();
+  return `${window.location.origin}/api/oauth/login`;
 };

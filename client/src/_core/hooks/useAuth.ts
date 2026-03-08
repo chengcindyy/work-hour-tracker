@@ -39,6 +39,8 @@ export function useAuth(options?: UseAuthOptions) {
     } finally {
       utils.auth.me.setData(undefined, null);
       await utils.auth.me.invalidate();
+      // 登出後導向首頁
+      window.location.href = "/";
     }
   }, [logoutMutation, utils]);
 

@@ -1,39 +1,50 @@
-# ============================================
-# Stage 1: Build
-# ============================================
-FROM node:20-alpine AS builder
+# syntax = docker/dockerfile:1
 
-RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
+# Adjust NODE_VERSION as desired
+ARG NODE_VERSION=22.17.0
+FROM node:${NODE_VERSION}-slim AS base
 
+LABEL fly_launch_runtime="Node.js"
+
+# Node.js app lives here
 WORKDIR /app
 
+# Set production environment
+ENV NODE_ENV="production"
+
+# Install pnpm
+ARG PNPM_VERSION=10.4.1
+RUN npm install -g pnpm@$PNPM_VERSION
+
+
+# Throw-away build stage to reduce size of final image
+FROM base AS build
+
+# Install packages needed to build node modules
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
+
+# Install node modules (patches required for pnpm patchedDependencies)
 COPY package.json pnpm-lock.yaml ./
 COPY patches ./patches
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --prod=false
 
+# Copy application code
 COPY . .
-RUN pnpm build
 
-# ============================================
-# Stage 2: Production
-# ============================================
-FROM node:20-alpine AS runner
+# Build application
+RUN pnpm run build
 
-RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
+# Remove development dependencies
+RUN pnpm prune --prod
 
-WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
-COPY patches ./patches
-RUN pnpm install --frozen-lockfile --prod
+# Final stage for app image
+FROM base
 
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/drizzle ./drizzle
-COPY --from=builder /app/scripts/migrate.mjs ./scripts/migrate.mjs
+# Copy built application
+COPY --from=build /app /app
 
-ENV NODE_ENV=production
-ENV PORT=3000
-
+# Start the server by default, this can be overwritten at runtime
 EXPOSE 3000
-
-CMD ["sh", "-c", "node scripts/migrate.mjs && node dist/index.js"]
+CMD [ "pnpm", "run", "start" ]

@@ -58,26 +58,28 @@ function getFixedDatesPeriods(dates: number[], year: number): SettlementPeriod[]
     for (let i = 0; i < dates.length; i++) {
       const currDay = dates[i];
       const prevDay = dates[(i - 1 + dates.length) % dates.length];
-      const prevIndex = (i - 1 + dates.length) % dates.length;
 
       let startDate: Date;
       let endDate: Date;
+
+      const lastDayOfCurrMonth = lastDayOfMonth(new Date(year, month - 1, 1)).getDate();
+      const effectiveEndDay = Math.min(currDay, lastDayOfCurrMonth);
 
       if (i === 0) {
         // 第一個結算日：從上月最後一個結算日+1 到本月此結算日
         const prevMonth = month === 1 ? 12 : month - 1;
         const prevYear = month === 1 ? year - 1 : year;
-        const prevMonthLastSettlement = new Date(prevYear, prevMonth - 1, dates[dates.length - 1]);
+        const prevMonthLastDay = lastDayOfMonth(new Date(prevYear, prevMonth - 1, 1)).getDate();
+        const prevDayCapped = Math.min(dates[dates.length - 1], prevMonthLastDay);
+        const prevMonthLastSettlement = new Date(prevYear, prevMonth - 1, prevDayCapped);
         startDate = addDays(prevMonthLastSettlement, 1);
-        endDate = new Date(year, month - 1, currDay);
+        endDate = new Date(year, month - 1, effectiveEndDay);
       } else {
         startDate = new Date(year, month - 1, prevDay + 1);
-        endDate = new Date(year, month - 1, currDay);
+        endDate = new Date(year, month - 1, effectiveEndDay);
       }
 
-      // 確保 endDate 有效（如 2 月無 30、31）
-      const lastDayOfCurrMonth = lastDayOfMonth(new Date(year, month - 1, 1)).getDate();
-      if (currDay > lastDayOfCurrMonth && i > 0) continue;
+      // 跨月區間：若 endDate 因 cap 變成上月，則略過（不應發生，因已用 effectiveEndDay）
       if (i === 0 && endDate.getMonth() !== month - 1) continue;
 
       periods.push({

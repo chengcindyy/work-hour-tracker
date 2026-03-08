@@ -34,7 +34,7 @@ export async function createContext(
     user = null;
   }
 
-  if (!user && !ENV.isProduction) {
+  if (!user && !ENV.isProduction && !ENV.disableDevFallback) {
     user = DEV_FALLBACK_USER;
   }
 

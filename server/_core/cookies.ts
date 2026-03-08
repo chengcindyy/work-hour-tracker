@@ -39,10 +39,15 @@ export function getSessionCookieOptions(
   //       ? hostname
   //       : undefined;
 
+  const secure = isSecureRequest(req);
+  // sameSite: "none" 必須搭配 secure: true，否則瀏覽器會拒絕儲存
+  // localhost (http) 時用 "lax" 才能正常設定 cookie
+  const sameSite = secure ? ("none" as const) : ("lax" as const);
+
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req),
+    sameSite,
+    secure,
   };
 }
