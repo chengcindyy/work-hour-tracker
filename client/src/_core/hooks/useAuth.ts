@@ -38,8 +38,8 @@ export function useAuth(options?: UseAuthOptions) {
       throw error;
     } finally {
       utils.auth.me.setData(undefined, null);
-      await utils.auth.me.invalidate();
-      // 登出後導向首頁
+      void utils.auth.me.invalidate();
+      // 登出後導向首頁（不 await invalidate，立即導向）
       window.location.href = "/";
     }
   }, [logoutMutation, utils]);
