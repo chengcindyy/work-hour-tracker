@@ -70,7 +70,7 @@ export default function SettingsPage() {
     const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
     const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
     const rawData = atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
+    const outputArray = new Uint8Array(new ArrayBuffer(rawData.length));
     for (let i = 0; i < rawData.length; ++i) {
       outputArray[i] = rawData.charCodeAt(i);
     }
@@ -93,7 +93,8 @@ export default function SettingsPage() {
     }
     try {
       const reg = await navigator.serviceWorker.ready;
-      const applicationServerKey = urlBase64ToUint8Array(vapidData.publicKey);
+      const applicationServerKey =
+        urlBase64ToUint8Array(vapidData.publicKey) as BufferSource;
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey,

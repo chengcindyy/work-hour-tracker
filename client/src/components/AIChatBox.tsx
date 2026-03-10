@@ -65,7 +65,9 @@ import { DefaultChatTransport } from "ai";
 // import them directly from "ai" package in your consuming code.
 // ============================================================================
 
-import type { UIMessage, UIMessagePart, UIToolInvocation } from "ai";
+import type { UIMessage, UIToolInvocation } from "ai";
+
+type ChatMessagePart = UIMessage["parts"][number];
 
 /**
  * Tool invocation state derived from AI SDK's UIToolInvocation type.
@@ -104,7 +106,7 @@ export function isToolComplete(state: ToolInvocationState): boolean {
  */
 export interface ToolPartRendererProps {
   /** The tool part from the message - type is `tool-${toolName}` */
-  part: UIMessagePart & { type: `tool-${string}` };
+  part: ChatMessagePart & { type: `tool-${string}` };
   /** Extracted tool name for convenience */
   toolName: string;
   /** Current state of the tool invocation */
@@ -124,7 +126,7 @@ export interface AIChatBoxProps {
   api?: string;
 
   /** Unique chat ID - changing this triggers message sync */
-  chatId: string;
+  chatId?: string;
 
   /** Optional user ID to send with requests */
   userId?: number;
@@ -133,7 +135,7 @@ export interface AIChatBoxProps {
    * Initial messages loaded from your data layer.
    * When this changes (e.g., switching chats), messages are synced via setMessages.
    */
-  initialMessages: UIMessage[];
+  initialMessages?: UIMessage[];
 
   /**
    * Called when chat completes (streaming finished).
@@ -152,6 +154,9 @@ export interface AIChatBoxProps {
 
   /** Additional CSS classes for the container */
   className?: string;
+
+  /** Optional fixed height for demos and embedded layouts */
+  height?: string | number;
 
   /** Message shown when chat is empty */
   emptyStateMessage?: string;
@@ -245,7 +250,7 @@ function MessageBubble({
             }
             return (
               <div key={i} className="prose prose-sm dark:prose-invert max-w-none">
-                <Markdown mode={isStreaming ? "typewriter" : "static"} typewriterSpeed={50}>
+                <Markdown mode={isStreaming ? "streaming" : "static"} isAnimating={isStreaming}>
                   {part.text}
                 </Markdown>
               </div>
@@ -256,7 +261,7 @@ function MessageBubble({
           if (part.type.startsWith("tool-")) {
             const toolName = part.type.replace("tool-", "");
             // Cast to access tool-specific properties
-            const toolPart = part as UIMessagePart & {
+            const toolPart = part as ChatMessagePart & {
               type: `tool-${string}`;
               toolCallId: string;
               state: ToolInvocationState;
@@ -324,13 +329,14 @@ function ThinkingIndicator() {
 
 export function AIChatBox({
   api = "/api/chat",
-  chatId,
+  chatId = "default-chat",
   userId,
-  initialMessages,
+  initialMessages = [],
   onFinish,
   renderToolPart = () => null, // Default returns null to use DefaultToolPartRenderer
   placeholder = "Type your message...",
   className,
+  height,
   emptyStateMessage = "Start a conversation with AI",
   suggestedPrompts,
 }: AIChatBoxProps) {
@@ -435,7 +441,10 @@ export function AIChatBox({
   // Render
   // -------------------------------------------------------------------------
   return (
-    <div className={cn("flex flex-col flex-1 min-h-0", className)}>
+    <div
+      className={cn("flex flex-col flex-1 min-h-0", className)}
+      style={height ? { height } : undefined}
+    >
       {/* Messages Area */}
       <div ref={scrollAreaRef} className="flex-1 overflow-hidden">
         <ScrollArea className="h-full">

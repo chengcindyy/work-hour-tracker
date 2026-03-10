@@ -179,15 +179,12 @@ export default function ShopsPage() {
       settlementPayload.settlementAnchorDate = null;
       settlementPayload.settlementCycleDays = null;
     } else if (formData.settlementType === "month_end") {
-      settlementPayload.settlementDates = null;
       settlementPayload.settlementAnchorDate = null;
       settlementPayload.settlementCycleDays = null;
     } else if (formData.settlementType === "cycle") {
-      settlementPayload.settlementDates = null;
       settlementPayload.settlementAnchorDate = formData.settlementAnchorDate;
       settlementPayload.settlementCycleDays = parseInt(formData.settlementCycleDays, 10);
     } else {
-      settlementPayload.settlementDates = null;
       settlementPayload.settlementAnchorDate = null;
       settlementPayload.settlementCycleDays = null;
     }
@@ -344,11 +341,11 @@ export default function ShopsPage() {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-semibold text-foreground">{shop.name}</h3>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-500 text-white">
                         {(shop as any).payType === "commission" ? "抽成制" : "時薪制"}
                       </span>
                       {(shop as any).settlementType && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                        <span className="text-xs px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 font-medium text-blue-700">
                           {(() => {
                             const st = (shop as any).settlementType;
                             if (st === "month_end") return "結算：月底";
