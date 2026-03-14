@@ -37,11 +37,11 @@ import {
 } from "./ui/select";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: Store, label: "Shops", path: "/shops" },
-  { icon: FileText, label: "Work Records", path: "/records" },
-  { icon: BarChart3, label: "Stats", path: "/stats" },
-  { icon: Settings, label: "Settings", path: "/settings" },
+  { icon: LayoutDashboard, label: "首頁", path: "/dashboard" },
+  { icon: Store, label: "店家設定", path: "/shops" },
+  { icon: FileText, label: "工時紀錄", path: "/records" },
+  { icon: BarChart3, label: "統計", path: "/stats" },
+  { icon: Settings, label: "設定", path: "/settings" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -104,7 +104,7 @@ function DashboardLayoutContent({
   const { workers, selectedWorkerId, setSelectedWorkerId, isLoading: workersLoading } =
     useWorkerSelection();
   const [location, navigate] = useLocation();
-  const { state, toggleSidebar } = useSidebar();
+  const { state, toggleSidebar, setOpenMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -173,14 +173,14 @@ function DashboardLayoutContent({
               <button
                 onClick={toggleSidebar}
                 className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
-                aria-label="Toggle navigation"
+                aria-label="切換導航"
               >
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="font-semibold tracking-tight truncate">
-                    Navigation
+                    工時登記系統
                   </span>
                 </div>
               ) : null}
@@ -199,7 +199,10 @@ function DashboardLayoutContent({
                       tooltip={item.label}
                       className={`h-10 transition-all font-normal`}
                     >
-                      <Link href={item.path}>
+                      <Link
+                        href={item.path}
+                        onClick={() => isMobile && setOpenMobile(false)}
+                      >
                         <item.icon
                           className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
                         />
@@ -237,7 +240,7 @@ function DashboardLayoutContent({
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign out</span>
+                  <span>登出</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -261,7 +264,7 @@ function DashboardLayoutContent({
               <div className="flex items-center gap-3">
                 <div className="flex flex-col gap-1">
                   <span className="tracking-tight text-foreground">
-                    {activeMenuItem?.label ?? "Menu"}
+                    {activeMenuItem?.label ?? "選單"}
                   </span>
                 </div>
               </div>
@@ -306,7 +309,12 @@ function DashboardLayoutContent({
               </SelectContent>
             </Select>
             <Button variant="outline" size="sm" asChild>
-              <Link href="/settings">成員管理</Link>
+              <Link
+                href="/settings"
+                onClick={() => isMobile && setOpenMobile(false)}
+              >
+                成員管理
+              </Link>
             </Button>
           </div>
         </div>
