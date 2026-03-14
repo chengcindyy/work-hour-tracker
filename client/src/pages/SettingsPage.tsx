@@ -7,7 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { TRPCClientError } from "@trpc/client";
-import { Bell, Download, Save, UserPlus } from "lucide-react";
+import { Bell, ChevronDown, Download, RefreshCw, Save, UserPlus } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { useUpdateAvailable } from "@/hooks/useUpdateAvailable";
 
 const DAYS_OF_WEEK = [
   { value: 0, label: "周日" },
@@ -21,6 +27,7 @@ const DAYS_OF_WEEK = [
 
 export default function SettingsPage() {
   const { selectedWorkerId, workers, setSelectedWorkerId } = useWorkerSelection();
+  const { hasUpdate } = useUpdateAvailable();
   const { data: notificationSettings } = trpc.notifications.getSettings.useQuery();
   const updateNotificationsMutation = trpc.notifications.updateSettings.useMutation();
   const savePushSubscriptionMutation = trpc.notifications.savePushSubscription.useMutation();
@@ -216,6 +223,59 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <h1 className="text-3xl font-bold text-foreground">設定</h1>
 
+      {/* 檢查更新 - 置頂，可收合，有更新時顯示黃色 */}
+      <Collapsible defaultOpen={false} className="group">
+        <Card
+          className={
+            hasUpdate
+              ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
+              : ""
+          }
+        >
+          <CollapsibleTrigger asChild>
+            <button className="flex w-full items-center justify-between px-4 text-left">
+              <div className="flex items-center gap-3">
+                <RefreshCw className="h-5 w-5 text-primary shrink-0" />
+                <div>
+                  <h2 className="font-semibold text-foreground">檢查更新</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {hasUpdate
+                      ? "有新版本可用，請點擊展開並按「檢查更新」取得最新內容"
+                      : "您的 App 目前為最新版本"}
+                  </p>
+                </div>
+              </div>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180 shrink-0" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t px-4 pt-3">
+              <p className="text-sm text-muted-foreground mb-3">
+                若 App 未自動更新至最新版本，點此可強制取得最新內容（無需移除主畫面圖示）
+              </p>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const reg = await navigator.serviceWorker.getRegistration();
+                    if (reg) {
+                      await reg.unregister();
+                    }
+                    window.location.reload();
+                  } catch {
+                    window.location.reload();
+                  }
+                }}
+                className="gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                檢查更新
+              </Button>
+            </div>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+
       {/* 成員管理 */}
       <Card className="p-4 sm:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -238,7 +298,7 @@ export default function SettingsPage() {
             <div className="font-medium text-foreground">已建立的成員</div>
             {workers.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                尚未建立任何成員，建議先建立兩個成員，例如「自己」與「先生」，之後即可在右上角切換。
+                尚未建立任何成員，請先新增成員。
               </p>
             ) : (
               <div className="space-y-2">
@@ -307,7 +367,7 @@ export default function SettingsPage() {
                               variant={selectedWorkerId === worker.id ? "default" : "outline"}
                               onClick={() => setSelectedWorkerId(worker.id)}
                             >
-                              設為目前成員
+                              選擇此成員
                             </Button>
                             <Button
                               size="sm"
@@ -327,7 +387,7 @@ export default function SettingsPage() {
                               onClick={async () => {
                                 if (
                                   !window.confirm(
-                                    "確定要停用此成員嗎？相關工時仍會保留，但無法再選擇為目前成員。"
+                                    "確定要移除此成員嗎？相關工時仍會保留，但無法再選擇為目前成員。"
                                   )
                                 ) {
                                   return;
@@ -340,13 +400,13 @@ export default function SettingsPage() {
                                     setSelectedWorkerId(null);
                                   }
                                   await utils.workers.list.invalidate();
-                                  toast.success("成員已停用");
+                                  toast.success("成員已移除");
                                 } catch {
-                                  toast.error("停用成員失敗");
+                                  toast.error("移除成員失敗");
                                 }
                               }}
                             >
-                              停用
+                              移除成員
                             </Button>
                           </div>
                         </>
@@ -362,7 +422,7 @@ export default function SettingsPage() {
             <div className="font-medium text-foreground">新增成員</div>
             <div className="flex flex-col sm:flex-row gap-2">
               <Input
-                placeholder="例如：自己、先生、小幫手 A"
+                placeholder="請輸入成員名稱"
                 value={newWorkerName}
                 onChange={e => setNewWorkerName(e.target.value)}
               />

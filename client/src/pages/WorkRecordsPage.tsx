@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Edit2, Trash2, Plus, Clock, Minus, ChevronDown } from "lucide-react";
+import { Edit2, Trash2, Plus, Clock, Minus, ChevronDown, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/useMobile";
@@ -29,6 +29,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import type { DateRange } from "react-day-picker";
 
 export default function WorkRecordsPage() {
   const now = new Date();
@@ -41,12 +48,18 @@ export default function WorkRecordsPage() {
   const [selectedServiceTypeId, setSelectedServiceTypeId] = useState<string>("");
   const [lineItems, setLineItems] = useState<{ serviceTypeId: string; hours: string }[]>([{ serviceTypeId: "", hours: "" }]);
   const [filterShopId, setFilterShopId] = useState<string>("");
-  const [filterStartDate, setFilterStartDate] = useState(() =>
-    format(new Date(currentYear, currentMonth - 1, 1), "yyyy-MM-dd")
-  );
-  const [filterEndDate, setFilterEndDate] = useState(() =>
-    format(new Date(currentYear, currentMonth, 0), "yyyy-MM-dd")
-  );
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => ({
+    from: new Date(currentYear, currentMonth - 1, 1),
+    to: new Date(currentYear, currentMonth, 0),
+  }));
+  const filterStartDate = dateRange?.from
+    ? format(dateRange.from, "yyyy-MM-dd")
+    : format(new Date(currentYear, currentMonth - 1, 1), "yyyy-MM-dd");
+  const filterEndDate = dateRange?.to
+    ? format(dateRange.to, "yyyy-MM-dd")
+    : dateRange?.from
+      ? format(dateRange.from, "yyyy-MM-dd")
+      : format(new Date(currentYear, currentMonth, 0), "yyyy-MM-dd");
   const [formData, setFormData] = useState({
     workDate: format(new Date(), "yyyy-MM-dd"),
     hours: "",
@@ -107,24 +120,26 @@ export default function WorkRecordsPage() {
 
   const setDateRangeThisYear = () => {
     const y = currentYear;
-    setFilterStartDate(`${y}-01-01`);
-    setFilterEndDate(`${y}-12-31`);
+    setDateRange({
+      from: new Date(y, 0, 1),
+      to: new Date(y, 11, 31),
+    });
   };
   const setDateRangeLastMonth = () => {
-    const [y, m] = filterStartDate.split("-").map(Number);
-    const d = new Date(y, m - 1 - 1, 1);
-    const ny = d.getFullYear();
-    const nm = d.getMonth() + 1;
-    setFilterStartDate(format(new Date(ny, nm - 1, 1), "yyyy-MM-dd"));
-    setFilterEndDate(format(new Date(ny, nm, 0), "yyyy-MM-dd"));
+    const base = dateRange?.from ?? new Date(currentYear, currentMonth - 1, 1);
+    const d = new Date(base.getFullYear(), base.getMonth() - 1, 1);
+    setDateRange({
+      from: new Date(d.getFullYear(), d.getMonth(), 1),
+      to: new Date(d.getFullYear(), d.getMonth() + 1, 0),
+    });
   };
   const setDateRangeNextMonth = () => {
-    const [y, m] = filterStartDate.split("-").map(Number);
-    const d = new Date(y, m - 1 + 1, 1);
-    const ny = d.getFullYear();
-    const nm = d.getMonth() + 1;
-    setFilterStartDate(format(new Date(ny, nm - 1, 1), "yyyy-MM-dd"));
-    setFilterEndDate(format(new Date(ny, nm, 0), "yyyy-MM-dd"));
+    const base = dateRange?.from ?? new Date(currentYear, currentMonth - 1, 1);
+    const d = new Date(base.getFullYear(), base.getMonth() + 1, 1);
+    setDateRange({
+      from: new Date(d.getFullYear(), d.getMonth(), 1),
+      to: new Date(d.getFullYear(), d.getMonth() + 1, 0),
+    });
   };
 
   const handleOpenDialog = (record?: any) => {
@@ -311,16 +326,16 @@ export default function WorkRecordsPage() {
   };
 
   const filterContent = (
-    <div className="flex flex-col gap-4 min-w-0">
-      {/* 第一列：店家與日期篩選 */}
-      <div className="flex flex-col sm:flex-row flex-wrap gap-4 sm:items-end">
-        <div className="form-group flex-1 min-w-0 sm:min-w-[140px]">
-          <label className="form-label">店家</label>
+    <div className="space-y-3 min-w-0">
+      {/* 第一行：店家 + 日期範圍（桌面版並排） */}
+      <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-3 md:items-end">
+        <div className="form-group min-w-0 gap-1.5">
+          <label className="form-label text-xs">店家</label>
           <Select
             value={filterShopId || "all"}
             onValueChange={(v) => setFilterShopId(v === "all" ? "" : v)}
           >
-            <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectTrigger className="h-9 w-full md:w-[160px]">
               <SelectValue placeholder="全部店家" />
             </SelectTrigger>
             <SelectContent>
@@ -333,48 +348,75 @@ export default function WorkRecordsPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="form-group flex-1 min-w-0 sm:min-w-[120px]">
-          <label className="form-label">開始日期</label>
-          <Input
-            type="date"
-            value={filterStartDate}
-            onChange={(e) => setFilterStartDate(e.target.value)}
-            className="w-full sm:w-[150px]"
-          />
-        </div>
-        <div className="form-group flex-1 min-w-0 sm:min-w-[120px]">
-          <label className="form-label">結束日期</label>
-          <Input
-            type="date"
-            value={filterEndDate}
-            onChange={(e) => setFilterEndDate(e.target.value)}
-            className="w-full sm:w-[150px]"
-          />
+        <div className="form-group min-w-0 gap-1.5">
+          <label className="form-label text-xs">日期範圍</label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="h-9 w-full md:w-[240px] justify-start font-normal text-sm"
+              >
+                <CalendarIcon className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="truncate">
+                  {dateRange?.from ? (
+                    dateRange.to ? (
+                      dateRange.from.getTime() === dateRange.to.getTime() ? (
+                        format(dateRange.from, "yyyy/MM/dd")
+                      ) : (
+                        `${format(dateRange.from, "yyyy/MM/dd")} - ${format(dateRange.to, "yyyy/MM/dd")}`
+                      )
+                    ) : (
+                      format(dateRange.from, "yyyy/MM/dd")
+                    )
+                  ) : (
+                    "選擇日期範圍"
+                  )}
+                </span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                selected={dateRange}
+                onSelect={setDateRange}
+                numberOfMonths={isMobile ? 1 : 2}
+              />
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
-      {/* 第二列：快速日期按鈕與清除篩選 */}
-      <div className="flex flex-wrap gap-2 shrink-0">
-        <Button variant="outline" size="sm" onClick={setDateRangeThisYear} className="shrink-0 whitespace-nowrap">
-          今年
-        </Button>
-        <Button variant="outline" size="sm" onClick={setDateRangeLastMonth} className="shrink-0 whitespace-nowrap">
-          上個月
-        </Button>
-        <Button variant="outline" size="sm" onClick={setDateRangeNextMonth} className="shrink-0 whitespace-nowrap">
-          下個月
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="shrink-0 whitespace-nowrap"
-          onClick={() => {
-            setFilterShopId("");
-            setFilterStartDate(format(new Date(currentYear, currentMonth - 1, 1), "yyyy-MM-dd"));
-            setFilterEndDate(format(new Date(currentYear, currentMonth, 0), "yyyy-MM-dd"));
-          }}
-        >
-          清除篩選
-        </Button>
+      {/* 第二行：快速按鈕 + 記錄數 */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1.5">
+          <Button variant="outline" size="sm" onClick={setDateRangeThisYear} className="h-8 text-xs px-2.5">
+            今年
+          </Button>
+          <Button variant="outline" size="sm" onClick={setDateRangeLastMonth} className="h-8 text-xs px-2.5">
+            上個月
+          </Button>
+          <Button variant="outline" size="sm" onClick={setDateRangeNextMonth} className="h-8 text-xs px-2.5">
+            下個月
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs px-2.5"
+            onClick={() => {
+              setFilterShopId("");
+              setDateRange({
+                from: new Date(currentYear, currentMonth - 1, 1),
+                to: new Date(currentYear, currentMonth, 0),
+              });
+            }}
+          >
+            清除篩選
+          </Button>
+        </div>
+        {filteredRecords.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            共 {filteredRecords.length} 筆紀錄
+          </p>
+        )}
       </div>
     </div>
   );
@@ -395,38 +437,27 @@ export default function WorkRecordsPage() {
         </Button>
       </div>
 
-      {/* 篩選區：手機版收合，桌面版展開 */}
-      {isMobile ? (
-        <Collapsible>
-          <Card className="p-3">
-            <CollapsibleTrigger asChild>
-              <button className="flex items-center justify-between w-full text-left">
-                <span className="font-medium text-foreground">
-                  篩選
-                  {filteredRecords.length > 0 && (
-                    <span className="text-muted-foreground font-normal ml-2">
-                      （共 {filteredRecords.length} 筆）
-                    </span>
-                  )}
-                </span>
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="pt-4 space-y-4">{filterContent}</div>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-      ) : (
-        <Card className="p-4">
-          {filterContent}
-          {filteredRecords.length > 0 && (
-            <p className="text-sm text-muted-foreground mt-3">
-              共 {filteredRecords.length} 筆紀錄
-            </p>
-          )}
+      {/* 篩選區：toggle 收合，預設打開（手機、電腦版一致） */}
+      <Collapsible defaultOpen className="group">
+        <Card className="p-3">
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center justify-between w-full text-left py-0.5 -mt-0.5">
+              <span className="font-medium text-foreground">
+                篩選
+                {filteredRecords.length > 0 && (
+                  <span className="text-muted-foreground font-normal ml-2">
+                    （共 {filteredRecords.length} 筆）
+                  </span>
+                )}
+              </span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="pt-3">{filterContent}</div>
+          </CollapsibleContent>
         </Card>
-      )}
+      </Collapsible>
 
       {/* 工時紀錄列表 */}
       {isLoading ? (
@@ -528,8 +559,10 @@ export default function WorkRecordsPage() {
               onClick={() =>
                 workRecords && workRecords.length > 0
                   ? (setFilterShopId(""),
-                    setFilterStartDate(format(new Date(currentYear, currentMonth - 1, 1), "yyyy-MM-dd")),
-                    setFilterEndDate(format(new Date(currentYear, currentMonth, 0), "yyyy-MM-dd")))
+                    setDateRange({
+                      from: new Date(currentYear, currentMonth - 1, 1),
+                      to: new Date(currentYear, currentMonth, 0),
+                    }))
                   : navigate("/dashboard")
               }
               className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"

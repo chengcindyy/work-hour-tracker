@@ -21,9 +21,11 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
+import { useUpdateAvailable } from "@/hooks/useUpdateAvailable";
 import { LayoutDashboard, LogOut, PanelLeft, Store, FileText, BarChart3, Settings } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
+import { toast } from "sonner";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import {
@@ -97,9 +99,11 @@ function DashboardLayoutContent({
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
+  const { hasUpdate } = useUpdateAvailable();
+  const hasShownUpdateToast = useRef(false);
   const { workers, selectedWorkerId, setSelectedWorkerId, isLoading: workersLoading } =
     useWorkerSelection();
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
@@ -112,6 +116,19 @@ function DashboardLayoutContent({
       setIsResizing(false);
     }
   }, [isCollapsed]);
+
+  useEffect(() => {
+    if (hasUpdate && !hasShownUpdateToast.current) {
+      hasShownUpdateToast.current = true;
+      toast.info("應用程式有新版本", {
+        description: "請到設定頁面點選「檢查更新」以取得最新版本",
+        action: {
+          label: "前往設定",
+          onClick: () => navigate("/settings"),
+        },
+      });
+    }
+  }, [hasUpdate]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {

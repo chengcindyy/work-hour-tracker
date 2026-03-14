@@ -150,7 +150,30 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+/** 建置時產生版本號，供客戶端與伺服器比對是否有更新 */
+function vitePluginVersion(): Plugin {
+  const version = String(Date.now());
+  return {
+    name: "version",
+    config() {
+      return { define: { __APP_VERSION__: JSON.stringify(version) } };
+    },
+    writeBundle() {
+      const outFile = path.join(PROJECT_ROOT, "dist", "public", "version.json");
+      fs.mkdirSync(path.dirname(outFile), { recursive: true });
+      fs.writeFileSync(outFile, JSON.stringify({ version }), "utf-8");
+    },
+  };
+}
+
+const plugins = [
+  react(),
+  tailwindcss(),
+  jsxLocPlugin(),
+  vitePluginManusRuntime(),
+  vitePluginManusDebugCollector(),
+  vitePluginVersion(),
+];
 
 export default defineConfig({
   plugins,

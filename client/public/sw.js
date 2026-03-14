@@ -75,7 +75,25 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 靜態資源：優先使用緩存，失敗時使用網絡
+  // HTML / 導航請求：Network First（優先從網路取得最新版本，deploy 後用戶可即時取得更新）
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request, { cache: "reload" })
+        .then((response) => {
+          if (response && response.status === 200 && response.type !== "error") {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match(request).then((cached) => cached || caches.match("/") || caches.match("/index.html"))
+        )
+    );
+    return;
+  }
+
+  // 靜態資源（JS、CSS 等）：優先使用緩存，失敗時使用網絡
   event.respondWith(
     caches.match(request).then((response) => {
       if (response) {
