@@ -296,7 +296,9 @@ export default function StatsPage() {
                     }
                   />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent
+                  collisionPadding={{ top: 60, right: 10, bottom: 10, left: 10 }}
+                >
                   {settlementPeriods?.map((p) => (
                     <SelectItem
                       key={`${p.startDate}_${p.endDate}`}

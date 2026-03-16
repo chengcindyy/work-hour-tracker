@@ -656,17 +656,6 @@ export const appRouter = router({
           input.reminderDays
         );
       }),
-
-    /** 發送測試推播（用於本地驗證） */
-    sendTestPush: protectedProcedure.mutation(async ({ ctx }) => {
-      const { sendPushToUser } = await import("./_core/pushService");
-      const result = await sendPushToUser(ctx.user.id, {
-        title: "工時登記系統",
-        body: "這是測試推播，若收到表示設定成功！",
-        tag: `test-${Date.now()}`, // 每次唯一 tag，避免被前一個通知取代
-      });
-      return result;
-    }),
   }),
 });
 

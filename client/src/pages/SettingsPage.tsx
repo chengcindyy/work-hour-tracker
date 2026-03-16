@@ -31,7 +31,6 @@ export default function SettingsPage() {
   const { data: notificationSettings } = trpc.notifications.getSettings.useQuery();
   const updateNotificationsMutation = trpc.notifications.updateSettings.useMutation();
   const savePushSubscriptionMutation = trpc.notifications.savePushSubscription.useMutation();
-  const sendTestPushMutation = trpc.notifications.sendTestPush.useMutation();
   const { data: vapidData } = trpc.notifications.getVapidPublicKey.useQuery();
   const { data: workRecords } = trpc.workRecords.list.useQuery(
     {
@@ -137,7 +136,7 @@ export default function SettingsPage() {
       if (isEnabled) {
         const ok = await subscribeToPush();
         if (ok) {
-          toast.success("推播設定已保存，可點「發送測試推播」驗證");
+          toast.success("推播設定已保存");
         } else {
           toast.warning("推播設定已保存，但訂閱未完成，請點「訂閱推播」重試");
         }
@@ -516,7 +515,7 @@ export default function SettingsPage() {
 
               {!vapidData?.publicKey && (
                 <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-                  <strong>「訂閱推播」與「發送測試推播」按鈕無法點擊？</strong>
+                  <strong>「訂閱推播」按鈕無法點擊？</strong>
                   <p className="mt-1">
                     請確認 .env 已設定 VAPID_PUBLIC_KEY 和 VAPID_PRIVATE_KEY（執行 <code className="bg-amber-200/50 px-1 rounded">pnpm run generate-vapid</code> 產生），並<strong>重啟 dev 伺服器</strong>（Ctrl+C 後重新執行 pnpm dev）。
                   </p>
@@ -535,31 +534,11 @@ export default function SettingsPage() {
                   variant="outline"
                   onClick={async () => {
                     const ok = await subscribeToPush();
-                    if (ok) toast.success("訂閱成功，可點「發送測試推播」驗證");
+                    if (ok) toast.success("訂閱成功");
                   }}
                   disabled={savePushSubscriptionMutation.isPending || !vapidData?.publicKey}
                 >
                   {savePushSubscriptionMutation.isPending ? "訂閱中..." : "訂閱推播"}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={async () => {
-                    try {
-                      const result = await sendTestPushMutation.mutateAsync();
-                      if (result.sent > 0) {
-                        toast.success("測試推播已發送，請稍候確認是否收到");
-                      } else if (result.failed > 0) {
-                        toast.error("推播發送失敗，請點「訂閱推播」重新訂閱");
-                      } else {
-                        toast.error("尚無推播訂閱，請先點「訂閱推播」完成訂閱");
-                      }
-                    } catch {
-                      toast.error("推播發送失敗，請確認 VAPID 金鑰已設定");
-                    }
-                  }}
-                  disabled={sendTestPushMutation.isPending || !vapidData?.publicKey}
-                >
-                  {sendTestPushMutation.isPending ? "發送中..." : "發送測試推播"}
                 </Button>
               </div>
             </>

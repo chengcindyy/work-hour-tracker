@@ -41,6 +41,16 @@ self.addEventListener("activate", (event) => {
 // 開發環境（localhost）：不攔截，讓請求直接打到伺服器，避免快取舊的 HMR WebSocket 設定
 const isDev = self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1";
 
+// 離線 fallback：避免 respondWith 收到 undefined 導致 TypeError
+const OFFLINE_HTML = new Response(
+  '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>離線</title></head><body style="font-family:system-ui;padding:2rem;text-align:center"><h1>目前無法連線</h1><p>請檢查網路連線後再試。</p></body></html>',
+  { headers: { "Content-Type": "text/html; charset=utf-8" }, status: 503, statusText: "Service Unavailable" }
+);
+const OFFLINE_JSON = new Response(
+  JSON.stringify({ error: "離線", message: "請檢查網路連線後再試。" }),
+  { headers: { "Content-Type": "application/json" }, status: 503, statusText: "Service Unavailable" }
+);
+
 // 攔截請求
 self.addEventListener("fetch", (event) => {
   const { request } = event;
@@ -67,10 +77,9 @@ self.addEventListener("fetch", (event) => {
           });
           return response;
         })
-        .catch(() => {
-          // 在線失敗時，嘗試從緩存返回
-          return caches.match(request);
-        })
+        .catch(() =>
+          caches.match(request).then((cached) => cached ?? OFFLINE_JSON)
+        )
     );
     return;
   }
@@ -87,7 +96,10 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() =>
-          caches.match(request).then((cached) => cached || caches.match("/") || caches.match("/index.html"))
+          caches.match(request)
+            .then((c) => c ?? caches.match("/"))
+            .then((c) => c ?? caches.match("/index.html"))
+            .then((c) => c ?? OFFLINE_HTML)
         )
     );
     return;
@@ -115,10 +127,9 @@ self.addEventListener("fetch", (event) => {
 
           return response;
         })
-        .catch(() => {
-          // 離線時返回緩存的版本
-          return caches.match(request);
-        });
+        .catch(() =>
+          caches.match(request).then((cached) => cached ?? OFFLINE_HTML)
+        );
     })
   );
 });
