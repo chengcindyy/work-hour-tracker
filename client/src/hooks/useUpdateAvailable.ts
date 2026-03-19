@@ -16,7 +16,8 @@ export function useUpdateAvailable() {
   const { data, isLoading } = useQuery({
     queryKey: ["app-version"],
     queryFn: fetchServerVersion,
-    staleTime: 60 * 1000, // 1 分鐘內不重複檢查
+    staleTime: 0, // 每次 mount / focus 都檢查
+    refetchInterval: 2 * 60 * 1000, // 每 2 分鐘背景檢查
     retry: 1,
   });
 

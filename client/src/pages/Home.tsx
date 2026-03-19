@@ -38,7 +38,7 @@ export default function Home() {
       <nav className="relative border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="container flex items-center justify-between py-4">
           <div className="flex items-center gap-2">
-            <Clock className="w-6 h-6 text-primary" />
+            <img src="/favicon-32x32.png" alt="" className="w-6 h-6 object-contain" />
             <h1 className="text-2xl font-bold text-foreground">工時登記系統</h1>
           </div>
         </div>

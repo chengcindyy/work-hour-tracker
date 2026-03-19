@@ -1,4 +1,4 @@
-const CACHE_NAME = "work-hour-tracker-v1";
+const CACHE_NAME = "work-hour-tracker-v2";
 const urlsToCache = [
   "/",
   "/index.html",
@@ -12,10 +12,7 @@ self.addEventListener("install", (event) => {
       return cache.addAll(urlsToCache);
     })
   );
-  // 開發環境立即啟用新 SW，不需等所有分頁關閉
-  if (self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1") {
-    self.skipWaiting();
-  }
+  self.skipWaiting();
 });
 
 // 激活 Service Worker
@@ -29,12 +26,7 @@ self.addEventListener("activate", (event) => {
           }
         })
       );
-    }).then(() => {
-      // 開發環境立即接管頁面
-      if (self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1") {
-        return self.clients.claim();
-      }
-    })
+    }).then(() => self.clients.claim())
   );
 });
 
@@ -151,8 +143,8 @@ self.addEventListener("push", (event) => {
   }
   const options = {
     body,
-    icon: "/favicon.ico",
-    badge: "/favicon.ico",
+    icon: "/android-chrome-192x192.png",
+    badge: "/android-chrome-192x192.png",
     tag,
     requireInteraction: false,
   };

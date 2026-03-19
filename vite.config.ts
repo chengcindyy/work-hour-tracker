@@ -150,7 +150,7 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-/** 建置時產生版本號，供客戶端與伺服器比對是否有更新 */
+/** 建置時產生版本號，供客戶端與伺服器比對是否有更新；並注入 icon cache-busting */
 function vitePluginVersion(): Plugin {
   const version = String(Date.now());
   return {
@@ -158,10 +158,28 @@ function vitePluginVersion(): Plugin {
     config() {
       return { define: { __APP_VERSION__: JSON.stringify(version) } };
     },
+    transformIndexHtml(html) {
+      return html.replace(/__ICON_VERSION__/g, version);
+    },
     writeBundle() {
-      const outFile = path.join(PROJECT_ROOT, "dist", "public", "version.json");
-      fs.mkdirSync(path.dirname(outFile), { recursive: true });
-      fs.writeFileSync(outFile, JSON.stringify({ version }), "utf-8");
+      const distPublic = path.join(PROJECT_ROOT, "dist", "public");
+      fs.mkdirSync(distPublic, { recursive: true });
+      fs.writeFileSync(
+        path.join(distPublic, "version.json"),
+        JSON.stringify({ version }),
+        "utf-8"
+      );
+      const manifestPath = path.join(distPublic, "manifest.json");
+      if (fs.existsSync(manifestPath)) {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+        if (manifest.icons?.length) {
+          manifest.icons = manifest.icons.map((icon: { src: string }) => ({
+            ...icon,
+            src: icon.src.includes("?") ? icon.src : `${icon.src}?v=${version}`,
+          }));
+          fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
+        }
+      }
     },
   };
 }
