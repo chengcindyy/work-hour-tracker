@@ -48,10 +48,20 @@ export default function WorkRecordsPage() {
   const [selectedServiceTypeId, setSelectedServiceTypeId] = useState<string>("");
   const [lineItems, setLineItems] = useState<{ serviceTypeId: string; hours: string }[]>([{ serviceTypeId: "", hours: "" }]);
   const [filterShopId, setFilterShopId] = useState<string>("");
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => ({
+  const [dateRange, setDateRangeRaw] = useState<DateRange | undefined>(() => ({
     from: new Date(currentYear, currentMonth - 1, 1),
     to: new Date(currentYear, currentMonth, 0),
   }));
+  const setDateRange = (val: DateRange | undefined) => {
+    const hadComplete = !!(dateRange?.from && dateRange?.to);
+    const sameFrom = dateRange?.from?.getTime() === val?.from?.getTime();
+    const diffTo = dateRange?.to?.getTime() !== val?.to?.getTime();
+    if (hadComplete && sameFrom && diffTo && val?.to) {
+      setDateRangeRaw({ from: val.to, to: undefined });
+    } else {
+      setDateRangeRaw(val);
+    }
+  };
   const filterStartDate = dateRange?.from
     ? format(dateRange.from, "yyyy-MM-dd")
     : format(new Date(currentYear, currentMonth - 1, 1), "yyyy-MM-dd");
@@ -60,6 +70,7 @@ export default function WorkRecordsPage() {
     : dateRange?.from
       ? format(dateRange.from, "yyyy-MM-dd")
       : format(new Date(currentYear, currentMonth, 0), "yyyy-MM-dd");
+
   const [formData, setFormData] = useState({
     workDate: format(new Date(), "yyyy-MM-dd"),
     hours: "",
@@ -80,8 +91,8 @@ export default function WorkRecordsPage() {
   const { data: workRecords, isLoading } = trpc.workRecords.list.useQuery(
     {
       workerId: selectedWorkerId ?? undefined,
-      startDate: new Date(filterStartDate + "T00:00:00"),
-      endDate: new Date(filterEndDate + "T23:59:59"),
+      startDate: filterStartDate,
+      endDate: filterEndDate,
     },
     {
       enabled: selectedWorkerId != null,
@@ -104,11 +115,6 @@ export default function WorkRecordsPage() {
       enabled: !!selectedShopId && selectedWorkerId != null,
     }
   );
-
-  const parseDateFromInput = (value: string) => {
-    const [year, month, day] = value.split("-").map(Number);
-    return new Date(year, month - 1, day, 12, 0, 0);
-  };
 
   const createRecordMutation = trpc.workRecords.create.useMutation();
   const updateRecordMutation = trpc.workRecords.update.useMutation();
@@ -256,7 +262,7 @@ export default function WorkRecordsPage() {
       const baseInput = {
         workerId: selectedWorkerId,
         shopId: parseInt(selectedShopId),
-        workDate: parseDateFromInput(formData.workDate),
+        workDate: formData.workDate,
         cashTips,
         cardTips,
         notes: formData.notes,

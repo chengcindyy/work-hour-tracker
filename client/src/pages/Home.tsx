@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
-import { Clock, TrendingUp, Download, Bell, Smartphone } from "lucide-react";
+import { Clock, TrendingUp, Download, Bell, Smartphone, BarChart3 } from "lucide-react";
 
 export default function Home() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -28,17 +28,17 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* 背景幾何圖案 */}
+      {/* 背景暖色裝飾圓 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 right-0 w-96 h-96 rounded-full opacity-5" style={{ background: "oklch(0.623 0.214 259.815)" }} />
-        <div className="absolute bottom-0 left-0 w-80 h-80 rounded-full opacity-5" style={{ background: "oklch(0.7 0.15 350)" }} />
+        <div className="absolute top-0 right-0 w-96 h-96 rounded-full opacity-5" style={{ background: "oklch(0.35 0.08 148)" }} />
+        <div className="absolute bottom-0 left-0 w-80 h-80 rounded-full opacity-5" style={{ background: "oklch(0.62 0.1 25)" }} />
       </div>
 
       {/* 導航欄 */}
-      <nav className="relative border-b border-border bg-card/50 backdrop-blur-sm">
+      <nav className="relative border-b border-border bg-card/60 backdrop-blur-sm">
         <div className="container flex items-center justify-between py-4">
-          <div className="flex items-center gap-2">
-            <img src="/favicon-32x32.png" alt="" className="w-6 h-6 object-contain" />
+          <div className="flex items-center gap-3">
+            <img src="/clock-icon.png" alt="" className="w-9 h-9 object-contain" />
             <h1 className="text-2xl font-bold text-foreground">工時登記系統</h1>
           </div>
         </div>
@@ -58,7 +58,7 @@ export default function Home() {
                   為按摩師和兼職工作者設計的工時登記系統。快速記錄工時、自動計算收入、隨時查看統計報表。
                 </p>
               </div>
-              <div className="flex gap-4">
+              <div className="flex gap-4 flex-wrap">
                 <Button
                   size="lg"
                   onClick={() => {
@@ -66,13 +66,14 @@ export default function Home() {
                     loginUrl.pathname = "/api/oauth/login";
                     window.location.href = loginUrl.toString();
                   }}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-8"
                 >
                   立即開始
                 </Button>
                 <Button
                   size="lg"
                   variant="outline"
+                  className="rounded-full"
                   onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}
                 >
                   了解更多
@@ -80,27 +81,34 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 功能預覽 */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="stat-card">
-                <Clock className="w-8 h-8 text-primary" />
-                <div className="font-semibold text-foreground">快速登記</div>
-                <div className="text-xs text-muted-foreground">一鍵記錄工時和收入</div>
-              </div>
-              <div className="stat-card">
-                <TrendingUp className="w-8 h-8 text-secondary" />
-                <div className="font-semibold text-foreground">統計分析</div>
-                <div className="text-xs text-muted-foreground">按月份和店家統計</div>
-              </div>
-              <div className="stat-card">
-                <Download className="w-8 h-8 text-accent" />
-                <div className="font-semibold text-foreground">數據匯出</div>
-                <div className="text-xs text-muted-foreground">CSV 格式備份</div>
-              </div>
-              <div className="stat-card">
-                <Smartphone className="w-8 h-8 text-primary" />
-                <div className="font-semibold text-foreground">PWA 應用</div>
-                <div className="text-xs text-muted-foreground">離線使用支援</div>
+            {/* 時鐘 Icon 中央展示 + 功能卡片 */}
+            <div className="flex flex-col items-center gap-6">
+              <img
+                src="/clock-icon.png"
+                alt="工時登記系統"
+                className="w-44 h-44 md:w-56 md:h-56 object-contain drop-shadow-lg"
+              />
+              <div className="grid grid-cols-2 gap-3 w-full">
+                <div className="stat-card items-center text-center py-4">
+                  <Clock className="w-6 h-6 text-primary mx-auto" />
+                  <div className="font-semibold text-foreground text-sm">快速登記</div>
+                  <div className="text-xs text-muted-foreground">一鍵記錄工時</div>
+                </div>
+                <div className="stat-card items-center text-center py-4">
+                  <TrendingUp className="w-6 h-6 text-secondary mx-auto" />
+                  <div className="font-semibold text-foreground text-sm">統計分析</div>
+                  <div className="text-xs text-muted-foreground">按月份統計</div>
+                </div>
+                <div className="stat-card items-center text-center py-4">
+                  <Download className="w-6 h-6 text-primary mx-auto" />
+                  <div className="font-semibold text-foreground text-sm">數據匯出</div>
+                  <div className="text-xs text-muted-foreground">CSV 格式備份</div>
+                </div>
+                <div className="stat-card items-center text-center py-4">
+                  <Smartphone className="w-6 h-6 text-secondary mx-auto" />
+                  <div className="font-semibold text-foreground text-sm">PWA 應用</div>
+                  <div className="text-xs text-muted-foreground">離線使用支援</div>
+                </div>
               </div>
             </div>
           </div>
@@ -115,7 +123,7 @@ export default function Home() {
 
           <div className="grid md:grid-cols-3 gap-8">
             {/* 功能 1 */}
-            <div className="card p-8 space-y-4">
+            <div className="bg-card rounded-3xl border border-border p-8 space-y-4 shadow-sm hover:shadow-md transition-shadow">
               <Clock className="w-10 h-10 text-primary" />
               <h4 className="text-xl font-semibold text-foreground">店家管理</h4>
               <p className="text-sm text-muted-foreground">
@@ -124,7 +132,7 @@ export default function Home() {
             </div>
 
             {/* 功能 2 */}
-            <div className="card p-8 space-y-4">
+            <div className="bg-card rounded-3xl border border-border p-8 space-y-4 shadow-sm hover:shadow-md transition-shadow">
               <TrendingUp className="w-10 h-10 text-secondary" />
               <h4 className="text-xl font-semibold text-foreground">工時登記</h4>
               <p className="text-sm text-muted-foreground">
@@ -133,8 +141,8 @@ export default function Home() {
             </div>
 
             {/* 功能 3 */}
-            <div className="card p-8 space-y-4">
-              <TrendingUp className="w-10 h-10 text-accent" />
+            <div className="bg-card rounded-3xl border border-border p-8 space-y-4 shadow-sm hover:shadow-md transition-shadow">
+              <BarChart3 className="w-10 h-10 text-primary" />
               <h4 className="text-xl font-semibold text-foreground">統計報表</h4>
               <p className="text-sm text-muted-foreground">
                 每月總結頁面，按店家分別統計總工時、總收入和總小費。
@@ -142,7 +150,7 @@ export default function Home() {
             </div>
 
             {/* 功能 4 */}
-            <div className="card p-8 space-y-4">
+            <div className="bg-card rounded-3xl border border-border p-8 space-y-4 shadow-sm hover:shadow-md transition-shadow">
               <Download className="w-10 h-10 text-primary" />
               <h4 className="text-xl font-semibold text-foreground">數據匯出</h4>
               <p className="text-sm text-muted-foreground">
@@ -151,7 +159,7 @@ export default function Home() {
             </div>
 
             {/* 功能 5 */}
-            <div className="card p-8 space-y-4">
+            <div className="bg-card rounded-3xl border border-border p-8 space-y-4 shadow-sm hover:shadow-md transition-shadow">
               <Bell className="w-10 h-10 text-secondary" />
               <h4 className="text-xl font-semibold text-foreground">推播提醒</h4>
               <p className="text-sm text-muted-foreground">
@@ -160,8 +168,8 @@ export default function Home() {
             </div>
 
             {/* 功能 6 */}
-            <div className="card p-8 space-y-4">
-              <Smartphone className="w-10 h-10 text-accent" />
+            <div className="bg-card rounded-3xl border border-border p-8 space-y-4 shadow-sm hover:shadow-md transition-shadow">
+              <Smartphone className="w-10 h-10 text-primary" />
               <h4 className="text-xl font-semibold text-foreground">PWA 應用</h4>
               <p className="text-sm text-muted-foreground">
                 支援離線使用、可加到 iOS 主畫面，隨時隨地記錄工時。
@@ -172,7 +180,7 @@ export default function Home() {
 
         {/* CTA 區段 */}
         <section className="container py-16 md:py-24">
-          <div className="card bg-gradient-to-br from-primary/10 to-secondary/10 p-12 text-center space-y-6">
+          <div className="bg-card rounded-3xl border border-border bg-gradient-to-br from-primary/10 to-secondary/10 p-12 text-center space-y-6 shadow-sm">
             <h3 className="text-3xl font-bold text-foreground">準備好開始了嗎？</h3>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               立即登入，開始使用工時登記系統。輕鬆管理您的工作時間和收入。
@@ -184,7 +192,7 @@ export default function Home() {
                 loginUrl.pathname = "/api/oauth/login";
                 window.location.href = loginUrl.toString();
               }}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90 px-10"
             >
               立即登入
             </Button>

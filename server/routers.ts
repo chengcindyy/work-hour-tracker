@@ -357,8 +357,8 @@ export const appRouter = router({
       .input(
         z.object({
           workerId: z.number().optional(),
-          startDate: z.date().optional(),
-          endDate: z.date().optional(),
+          startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+          endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         })
       )
       .query(async ({ ctx, input }) => {
@@ -381,7 +381,7 @@ export const appRouter = router({
           workerId: z.number(),
           shopId: z.number(),
           serviceTypeId: z.number().optional(),
-          workDate: z.date(),
+          workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式必須為 YYYY-MM-DD"),
           hours: z.number().min(0).optional(),
           serviceAmount: z.number().positive().optional(),
           lineItems: z
@@ -462,7 +462,7 @@ export const appRouter = router({
           workerId: z.number().optional(),
           shopId: z.number().optional(),
           serviceTypeId: z.number().optional(),
-          workDate: z.date().optional(),
+          workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式必須為 YYYY-MM-DD").optional(),
           hours: z.number().positive().optional(),
           serviceAmount: z.number().positive().optional(),
           lineItems: z
@@ -596,20 +596,13 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => {
-        // 使用本地日期解析，避免 new Date("YYYY-MM-DD") 在 UTC 解析造成的時區偏移
-        const parseDateOnly = (s: string) => {
-          const [y, m, d] = s.split("-").map(Number);
-          return new Date(y, m - 1, d);
-        };
-        const startDate = parseDateOnly(input.startDate);
-        const endDate = parseDateOnly(input.endDate);
-        if (startDate > endDate) {
+        if (input.startDate > input.endDate) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "開始日期不可晚於結束日期" });
         }
         return getStatsForDateRange(
           ctx.user.id,
-          startDate,
-          endDate,
+          input.startDate,
+          input.endDate,
           input.workerId,
           input.shopIds
         );

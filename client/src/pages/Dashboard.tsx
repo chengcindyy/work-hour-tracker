@@ -23,7 +23,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { toast } from "sonner";
-import { format, isSameDay } from "date-fns";
+import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { CalendarIcon, ChevronDown, Plus, Minus } from "lucide-react";
 import { Link } from "wouter";
@@ -144,7 +144,7 @@ export default function Dashboard() {
       const baseInput = {
         workerId: selectedWorkerId,
         shopId: parseInt(selectedShopId),
-        workDate,
+        workDate: format(workDate, "yyyy-MM-dd"),
         cashTips,
         cardTips,
         notes: formData.notes,
@@ -192,9 +192,7 @@ export default function Dashboard() {
     }
   };
 
-  const dateDisplayText = isSameDay(workDate, today)
-    ? "Today"
-    : format(workDate, "M/d/yyyy", { locale: zhTW });
+  const dateDisplayText = format(workDate, "yyyy/MM/dd", { locale: zhTW });
 
   const estimatedEarnings = selectedShopId
     ? isCommissionShop

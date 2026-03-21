@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
 import { useUpdateAvailable } from "@/hooks/useUpdateAvailable";
-import { LayoutDashboard, LogOut, PanelLeft, Store, FileText, BarChart3, Settings } from "lucide-react";
+import { LayoutDashboard, LogOut, Store, FileText, BarChart3, Settings } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { toast } from "sonner";
@@ -168,22 +168,26 @@ function DashboardLayoutContent({
           className="border-r-0"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center">
-            <div className="flex items-center gap-3 px-2 transition-all w-full">
+          <SidebarHeader className="h-auto justify-center py-4">
+            <div className="flex flex-col items-center gap-1 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
+                className="flex flex-col items-center gap-2 hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-ring w-full"
                 aria-label="切換導航"
               >
-                <PanelLeft className="h-4 w-4 text-muted-foreground" />
-              </button>
-              {!isCollapsed ? (
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate">
+                <img
+                  src="/clock-icon.png"
+                  alt="工時登記系統"
+                  className={`object-contain transition-all duration-200 ${
+                    isCollapsed ? "w-8 h-8" : "w-20 h-20"
+                  }`}
+                />
+                {!isCollapsed && (
+                  <span className="font-bold text-sm tracking-tight text-foreground text-center leading-tight">
                     工時登記系統
                   </span>
-                </div>
-              ) : null}
+                )}
+              </button>
             </div>
           </SidebarHeader>
 

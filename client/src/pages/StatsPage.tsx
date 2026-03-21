@@ -3,6 +3,7 @@ import { useWorkerSelection } from "@/_core/hooks/useWorkers";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Popover,
@@ -18,17 +19,35 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { Download, ChevronDown } from "lucide-react";
+import { Download, ChevronDown, CalendarIcon } from "lucide-react";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { useIsMobile } from "@/hooks/useMobile";
+import type { DateRange } from "react-day-picker";
 
 export default function StatsPage() {
   const now = new Date();
-  const [viewMode, setViewMode] = useState<"monthly" | "settlement">("monthly");
+  const [viewMode, setViewMode] = useState<"monthly" | "settlement" | "dateRange">("monthly");
   const [selectedYear, setSelectedYear] = useState(now.getFullYear().toString());
   const [selectedMonth, setSelectedMonth] = useState((now.getMonth() + 1).toString());
   const [selectedShopIds, setSelectedShopIds] = useState<number[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<{ startDate: string; endDate: string; label: string } | null>(null);
+  const [dateRange, setDateRangeRaw] = useState<DateRange | undefined>(() => ({
+    from: new Date(now.getFullYear(), now.getMonth(), 1),
+    to: new Date(now.getFullYear(), now.getMonth() + 1, 0),
+  }));
+  const setDateRange = (val: DateRange | undefined) => {
+    const hadComplete = !!(dateRange?.from && dateRange?.to);
+    const sameFrom = dateRange?.from?.getTime() === val?.from?.getTime();
+    const diffTo = dateRange?.to?.getTime() !== val?.to?.getTime();
+    if (hadComplete && sameFrom && diffTo && val?.to) {
+      setDateRangeRaw({ from: val.to, to: undefined });
+    } else {
+      setDateRangeRaw(val);
+    }
+  };
   const { selectedWorkerId } = useWorkerSelection();
+  const isMobile = useIsMobile();
 
   // 切換成員時重置店家篩選與結算區間
   useEffect(() => {
@@ -41,7 +60,7 @@ export default function StatsPage() {
     { enabled: !!selectedWorkerId }
   );
   const shopsWithSettlement = shops?.filter((s: any) => s.settlementType) ?? [];
-  const shopListForFilter = viewMode === "monthly" ? (shops ?? []) : shopsWithSettlement;
+  const shopListForFilter = viewMode === "settlement" ? shopsWithSettlement : (shops ?? []);
 
   const { data: monthlyStats } = trpc.stats.monthlyStats.useQuery(
     {
@@ -72,7 +91,28 @@ export default function StatsPage() {
     { enabled: viewMode === "settlement" && !!selectedPeriod && !!selectedWorkerId }
   );
 
-  const stats = viewMode === "monthly" ? monthlyStats : settlementStats;
+  const dateRangeStartDate = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : "";
+  const dateRangeEndDate = dateRange?.to
+    ? format(dateRange.to, "yyyy-MM-dd")
+    : dateRange?.from
+      ? format(dateRange.from, "yyyy-MM-dd")
+      : "";
+
+  const { data: dateRangeStats } = trpc.stats.byDateRange.useQuery(
+    {
+      workerId: selectedWorkerId ?? undefined,
+      startDate: dateRangeStartDate,
+      endDate: dateRangeEndDate,
+      shopIds: selectedShopIds.length > 0 ? selectedShopIds : undefined,
+    },
+    { enabled: viewMode === "dateRange" && !!dateRange?.from && !!selectedWorkerId }
+  );
+
+  const stats = viewMode === "monthly"
+    ? monthlyStats
+    : viewMode === "settlement"
+      ? settlementStats
+      : dateRangeStats;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("zh-TW", {
@@ -96,10 +136,11 @@ export default function StatsPage() {
     : [];
 
   const COLORS = [
-    "oklch(0.623 0.214 259.815)",
-    "oklch(0.7 0.15 280)",
-    "oklch(0.7 0.15 350)",
-    "oklch(0.623 0.214 259.815)",
+    "oklch(0.35 0.08 148)",   /* 橄欖綠 */
+    "oklch(0.60 0.1 148)",    /* 淺綠 */
+    "oklch(0.62 0.1 25)",     /* 珊瑚紅 */
+    "oklch(0.72 0.08 65)",    /* 暖金 */
+    "oklch(0.55 0.07 50)",    /* 棕褐 */
   ];
 
   const handleExportCSV = () => {
@@ -111,7 +152,9 @@ export default function StatsPage() {
     try {
       const title = viewMode === "monthly"
         ? `月份統計報表\n${selectedYear}年${selectedMonth}月`
-        : `結算區間統計報表\n${selectedPeriod?.label ?? ""} (${selectedPeriod?.startDate ?? ""} ~ ${selectedPeriod?.endDate ?? ""})`;
+        : viewMode === "settlement"
+          ? `結算區間統計報表\n${selectedPeriod?.label ?? ""} (${selectedPeriod?.startDate ?? ""} ~ ${selectedPeriod?.endDate ?? ""})`
+          : `日期區間統計報表\n${dateRangeStartDate} ~ ${dateRangeEndDate}`;
       let csv = title + "\n\n";
       csv += "總計\n";
       csv += `總工時,${formatHours(stats.totalHours)}\n`;
@@ -141,7 +184,9 @@ export default function StatsPage() {
         "download",
         viewMode === "monthly"
           ? `stats-${selectedYear}-${selectedMonth.padStart(2, "0")}.csv`
-          : `stats-settlement-${selectedPeriod?.startDate ?? ""}-${selectedPeriod?.endDate ?? ""}.csv`
+          : viewMode === "settlement"
+            ? `stats-settlement-${selectedPeriod?.startDate ?? ""}-${selectedPeriod?.endDate ?? ""}.csv`
+            : `stats-range-${dateRangeStartDate}-${dateRangeEndDate}.csv`
       );
       link.click();
       toast.success("報表已匯出");
@@ -169,31 +214,34 @@ export default function StatsPage() {
       </div>
 
       {/* 檢視模式切換 */}
-      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "monthly" | "settlement")}>
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "monthly" | "settlement" | "dateRange")}>
         <TabsList>
           <TabsTrigger value="monthly">依月份</TabsTrigger>
           <TabsTrigger value="settlement">依結算區間</TabsTrigger>
+          <TabsTrigger value="dateRange">依日期區間</TabsTrigger>
         </TabsList>
       </Tabs>
 
       {/* 時間選擇 */}
       <Card className="p-4">
         <div className="flex gap-4 items-end flex-wrap">
-          <div className="form-group">
-            <label className="form-label">年份</label>
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {years.map((year) => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {viewMode !== "dateRange" && (
+            <div className="form-group">
+              <label className="form-label">年份</label>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map((year) => (
+                    <SelectItem key={year} value={year.toString()}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {viewMode === "monthly" && (
             <div className="form-group">
@@ -213,7 +261,68 @@ export default function StatsPage() {
             </div>
           )}
 
-          {/* 店家多選：依月份用全部店家，依結算區間用有結算設定的店家 */}
+          {viewMode === "dateRange" && (
+            <div className="form-group">
+              <label className="form-label">日期範圍</label>
+              <div className="flex gap-2 items-center">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-64 justify-start font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="truncate">
+                        {dateRange?.from ? (
+                          dateRange.to && dateRange.from.getTime() !== dateRange.to.getTime() ? (
+                            `${format(dateRange.from, "yyyy/MM/dd")} - ${format(dateRange.to, "yyyy/MM/dd")}`
+                          ) : (
+                            format(dateRange.from, "yyyy/MM/dd")
+                          )
+                        ) : (
+                          "選擇日期範圍"
+                        )}
+                      </span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="range"
+                      captionLayout="dropdown"
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      defaultMonth={dateRange?.from ?? new Date()}
+                      numberOfMonths={isMobile ? 1 : 2}
+                      startMonth={new Date(now.getFullYear() - 4, 0)}
+                      endMonth={new Date(now.getFullYear() + 1, 11)}
+                    />
+                    <div className="px-3 pb-3 pt-1 text-center text-sm text-muted-foreground">
+                      {!dateRange?.from || (dateRange.from && dateRange.to)
+                        ? "點選日期作為起始日"
+                        : (
+                          <>
+                            起始：<span className="font-medium text-foreground">{format(dateRange.from, "yyyy/MM/dd")}</span>
+                            {" "}— 請選擇結束日
+                          </>
+                        )
+                      }
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDateRange({
+                    from: new Date(now.getFullYear(), now.getMonth(), 1),
+                    to: new Date(now.getFullYear(), now.getMonth() + 1, 0),
+                  })}
+                >
+                  重置
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="form-group">
             <label className="form-label">店家</label>
             <Popover>
@@ -389,11 +498,11 @@ export default function StatsPage() {
                       contentStyle={{
                         backgroundColor: "var(--card)",
                         border: "1px solid var(--border)",
-                        borderRadius: "0.5rem",
+                        borderRadius: "1rem",
                       }}
                       formatter={(value) => formatCurrency(value as number)}
                     />
-                    <Bar dataKey="earnings" fill="oklch(0.623 0.214 259.815)" />
+                    <Bar dataKey="earnings" fill="oklch(0.35 0.08 148)" />
                   </BarChart>
                 </ResponsiveContainer>
               </Card>

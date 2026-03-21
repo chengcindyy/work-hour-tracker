@@ -43,75 +43,95 @@
 }
 
 :root {
-  /* 北歐極簡美學 - 淡冷灰色背景 */
-  --primary: oklch(0.623 0.214 259.815); /* 冷藍色 */
-  --primary-foreground: oklch(1 0 0);
-  --sidebar-primary: oklch(0.623 0.214 259.815);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --chart-1: oklch(0.623 0.214 259.815);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.623 0.214 259.815);
-  --chart-4: oklch(0.623 0.214 259.815);
-  --chart-5: oklch(0.623 0.214 259.815);
-  --radius: 0.5rem;
-  --background: oklch(0.96 0.001 286.375); /* 淡灰白 */
-  --foreground: oklch(0.235 0.015 65); /* 深灰黑 */
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.7 0.15 280); /* 粉藍色 */
-  --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.7 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.7 0.15 350); /* 腦紅粉色 */
-  --accent-foreground: oklch(1 0 0);
+  /* 森林蘑菇 - 莫蘭迪暖米色系 */
+  --radius: 1.25rem; /* 20px 全局圓角 */
+
+  /* 主色：深橄欖綠（參考附圖 Save 按鈕） */
+  --primary: oklch(0.35 0.08 148);
+  --primary-foreground: oklch(0.98 0 0);
+  --sidebar-primary: oklch(0.35 0.08 148);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+
+  /* 圖表暖色系 */
+  --chart-1: oklch(0.35 0.08 148);   /* 橄欖綠 */
+  --chart-2: oklch(0.60 0.1 148);    /* 淺綠 */
+  --chart-3: oklch(0.62 0.1 25);     /* 珊瑚紅 */
+  --chart-4: oklch(0.72 0.08 65);    /* 暖金 */
+  --chart-5: oklch(0.55 0.07 50);    /* 棕褐 */
+
+  /* 背景：莫蘭迪暖米色 */
+  --background: oklch(0.945 0.022 68);
+  --foreground: oklch(0.26 0.05 50);  /* 深棕色文字 */
+
+  /* 卡片：奶油白 */
+  --card: oklch(0.975 0.012 72);
+  --card-foreground: oklch(0.26 0.05 50);
+
+  --popover: oklch(0.975 0.012 72);
+  --popover-foreground: oklch(0.26 0.05 50);
+
+  /* 次要色：珊瑚紅（側邊欄選中態） */
+  --secondary: oklch(0.62 0.1 25);
+  --secondary-foreground: oklch(0.98 0 0);
+
+  /* 靜音色 */
+  --muted: oklch(0.89 0.018 65);
+  --muted-foreground: oklch(0.50 0.03 55);
+
+  /* 強調色：暖沙 hover 色 */
+  --accent: oklch(0.89 0.022 65);
+  --accent-foreground: oklch(0.26 0.05 50);
+
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.91 0.004 286.32);
-  --input: oklch(0.91 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.7 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.91 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+
+  /* 邊框 / 輸入框 */
+  --border: oklch(0.855 0.028 65);
+  --input: oklch(0.975 0.012 72);
+  --ring: oklch(0.35 0.08 148);
+
+  /* 側邊欄：比背景略淡的奶油色 */
+  --sidebar: oklch(0.965 0.018 70);
+  --sidebar-foreground: oklch(0.26 0.05 50);
+  --sidebar-accent: oklch(0.89 0.022 65);
+  --sidebar-accent-foreground: oklch(0.26 0.05 50);
+  --sidebar-border: oklch(0.855 0.028 65);
+  --sidebar-ring: oklch(0.35 0.08 148);
 }
 
 .dark {
-  --primary: oklch(0.623 0.214 259.815);
-  --primary-foreground: oklch(1 0 0);
-  --sidebar-primary: oklch(0.623 0.214 259.815);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.7 0.15 280);
-  --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.7 0.15 350);
-  --accent-foreground: oklch(1 0 0);
+  --primary: oklch(0.55 0.09 148);
+  --primary-foreground: oklch(0.98 0 0);
+  --sidebar-primary: oklch(0.55 0.09 148);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --background: oklch(0.19 0.02 55);
+  --foreground: oklch(0.90 0.015 68);
+  --card: oklch(0.24 0.022 55);
+  --card-foreground: oklch(0.90 0.015 68);
+  --popover: oklch(0.24 0.022 55);
+  --popover-foreground: oklch(0.90 0.015 68);
+  --secondary: oklch(0.62 0.1 25);
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted: oklch(0.30 0.018 55);
+  --muted-foreground: oklch(0.68 0.018 65);
+  --accent: oklch(0.30 0.018 55);
+  --accent-foreground: oklch(0.90 0.015 68);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.623 0.214 259.815);
-  --chart-1: oklch(0.623 0.214 259.815);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.623 0.214 259.815);
-  --chart-4: oklch(0.623 0.214 259.815);
-  --chart-5: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.55 0.09 148);
+  --chart-1: oklch(0.55 0.09 148);
+  --chart-2: oklch(0.65 0.1 148);
+  --chart-3: oklch(0.62 0.1 25);
+  --chart-4: oklch(0.72 0.08 65);
+  --chart-5: oklch(0.60 0.07 50);
+  --sidebar: oklch(0.22 0.02 55);
+  --sidebar-foreground: oklch(0.90 0.015 68);
+  --sidebar-accent: oklch(0.30 0.018 55);
+  --sidebar-accent-foreground: oklch(0.90 0.015 68);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  --sidebar-ring: oklch(0.55 0.09 148);
 }
 
 @layer base {
@@ -177,28 +197,28 @@
   }
 }
 
-/* 北歐幾何抽象背景圖案 */
+/* 森林暖色背景圖案 */
 @layer components {
   .nordic-gradient-bg {
     @apply relative overflow-hidden;
-    background: linear-gradient(135deg, oklch(0.96 0.001 286.375) 0%, oklch(0.95 0.002 280) 100%);
+    background: linear-gradient(135deg, oklch(0.945 0.022 68) 0%, oklch(0.935 0.028 62) 100%);
   }
 
   .nordic-gradient-bg::before {
     content: '';
     @apply absolute top-0 right-0 w-96 h-96 rounded-full opacity-5;
-    background: oklch(0.623 0.214 259.815);
+    background: oklch(0.35 0.08 148);
   }
 
   .nordic-gradient-bg::after {
     content: '';
     @apply absolute bottom-0 left-0 w-80 h-80 rounded-full opacity-5;
-    background: oklch(0.7 0.15 350);
+    background: oklch(0.62 0.1 25);
   }
 
   /* 統計卡片 */
   .stat-card {
-    @apply bg-card text-card-foreground rounded-lg border border-border p-6 flex flex-col gap-2 shadow-sm hover:shadow-md transition-shadow;
+    @apply bg-card text-card-foreground rounded-2xl border border-border p-6 flex flex-col gap-2 shadow-sm hover:shadow-md transition-shadow;
   }
 
   .stat-value {

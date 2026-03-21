@@ -23,13 +23,6 @@ import { ENV } from './_core/env';
 let _db: ReturnType<typeof drizzle> | null = null;
 let _pool: Pool | null = null;
 
-function formatDateForDb(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -512,8 +505,8 @@ async function attachLineItemsToRecords(
 export async function getUserWorkRecords(
   userId: number,
   workerId?: number,
-  startDate?: Date,
-  endDate?: Date
+  startDate?: string,
+  endDate?: string
 ): Promise<WorkRecordWithLineItems[]> {
   const db = await getDb();
   if (!db) return [];
@@ -525,10 +518,10 @@ export async function getUserWorkRecords(
   }
 
   if (startDate) {
-    conditions.push(gte(workRecords.workDate, formatDateForDb(startDate)));
+    conditions.push(gte(workRecords.workDate, startDate));
   }
   if (endDate) {
-    conditions.push(lte(workRecords.workDate, formatDateForDb(endDate)));
+    conditions.push(lte(workRecords.workDate, endDate));
   }
 
   const records = await db
@@ -559,7 +552,7 @@ export async function createWorkRecord(
   userId: number,
   workerId: number,
   shopId: number,
-  workDate: Date,
+  workDate: string,
   cashTips: number,
   cardTips: number,
   notes: string | undefined,
@@ -576,7 +569,7 @@ export async function createWorkRecord(
     userId,
     workerId,
     shopId,
-    workDate: formatDateForDb(workDate),
+    workDate,
     cashTips: cashTips.toString(),
     cardTips: cardTips.toString(),
     totalEarnings: "", // set below
@@ -640,7 +633,7 @@ export async function updateWorkRecord(
     shopId?: number;
     serviceTypeId?: number;
     workerId?: number;
-    workDate?: Date;
+    workDate?: string;
     hours?: number;
     cashTips?: number;
     cardTips?: number;
@@ -664,7 +657,7 @@ export async function updateWorkRecord(
   const updateData: any = { ...updates };
   delete updateData.lineItems;
   if (updates.workDate !== undefined) {
-    updateData.workDate = formatDateForDb(updates.workDate);
+    updateData.workDate = updates.workDate;
   }
 
   const isCommissionRecord = record.serviceAmount != null && parseFloat(record.serviceAmount as any) > 0;
@@ -887,23 +880,29 @@ export async function getMonthlyStats(
   const db = await getDb();
   if (!db) return null;
 
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 0);
-  const records = (await getUserWorkRecords(userId, workerId, startDate, endDate)) as WorkRecordWithLineItems[];
+  const lastDay = new Date(year, month, 0).getDate();
+  const startYmd = `${year}-${String(month).padStart(2, "0")}-01`;
+  const endYmd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  const records = (await getUserWorkRecords(
+    userId,
+    workerId,
+    startYmd,
+    endYmd
+  )) as WorkRecordWithLineItems[];
   return aggregateWorkRecordsToStats(userId, records, shopIds);
 }
 
 export async function getStatsForDateRange(
   userId: number,
-  startDate: Date,
-  endDate: Date,
+  startDateYmd: string,
+  endDateYmd: string,
   workerId?: number,
   shopIds?: number[]
 ): Promise<StatsResult | null> {
   const db = await getDb();
   if (!db) return null;
 
-  const records = (await getUserWorkRecords(userId, workerId, startDate, endDate)) as WorkRecordWithLineItems[];
+  const records = (await getUserWorkRecords(userId, workerId, startDateYmd, endDateYmd)) as WorkRecordWithLineItems[];
   return aggregateWorkRecordsToStats(userId, records, shopIds);
 }
 

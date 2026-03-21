@@ -21,14 +21,11 @@ export function startPushReminderScheduler(): void {
       console.warn("[PushScheduler] Error:", err);
     }
   }, 60 * 1000);
-
-  console.log("[PushScheduler] Started (checks every minute)");
 }
 
 export function stopPushReminderScheduler(): void {
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;
-    console.log("[PushScheduler] Stopped");
   }
 }
