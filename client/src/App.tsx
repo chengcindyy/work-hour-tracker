@@ -13,6 +13,7 @@ import WorkRecordsPage from "./pages/WorkRecordsPage";
 import StatsPage from "./pages/StatsPage";
 import SettingsPage from "./pages/SettingsPage";
 import { WorkersProvider } from "@/_core/hooks/useWorkers";
+import { AppPreferencesProvider } from "@/contexts/AppPreferencesContext";
 
 function Router() {
   return (
@@ -74,9 +75,11 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
-          <AuthPrefetcher />
-          <Toaster />
-          <Router />
+          <AppPreferencesProvider>
+            <AuthPrefetcher />
+            <Toaster />
+            <Router />
+          </AppPreferencesProvider>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

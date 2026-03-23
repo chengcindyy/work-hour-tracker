@@ -45,6 +45,8 @@ export async function sendPushToUser(
   let sent = 0;
   let failed = 0;
 
+  const pushPayload = JSON.stringify({ title, body, tag });
+
   for (const sub of subscriptions) {
     try {
       await webPush.sendNotification(
@@ -55,7 +57,7 @@ export async function sendPushToUser(
             auth: sub.auth,
           },
         },
-        JSON.stringify({ title, body, tag }),
+        pushPayload,
         {
           TTL: 60 * 60 * 24,
         }

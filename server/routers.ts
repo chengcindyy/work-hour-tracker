@@ -1,4 +1,8 @@
-import { COOKIE_NAME } from "@shared/const";
+import {
+  COOKIE_NAME,
+  USER_PREFERENCE_CURRENCIES,
+  USER_PREFERENCE_UI_LOCALES,
+} from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
@@ -30,6 +34,8 @@ import {
   getNotificationSettings,
   upsertNotificationSettings,
   savePushSubscription,
+  getUserPreferencesForUser,
+  updateUserPreferences,
 } from "./db";
 import { getSettlementPeriods } from "./_core/settlementUtils";
 import { ENV } from "./_core/env";
@@ -609,6 +615,28 @@ export const appRouter = router({
       }),
   }),
 
+  // ============ 帳號 UI 偏好（語言、顯示幣別）============
+  userPreferences: router({
+    get: protectedProcedure.query(({ ctx }) => {
+      return getUserPreferencesForUser(ctx.user.id);
+    }),
+
+    update: protectedProcedure
+      .input(
+        z
+          .object({
+            uiLocale: z.enum(USER_PREFERENCE_UI_LOCALES).optional(),
+            currencyCode: z.enum(USER_PREFERENCE_CURRENCIES).optional(),
+          })
+          .refine((d) => d.uiLocale !== undefined || d.currencyCode !== undefined, {
+            message: "至少需要指定 uiLocale 或 currencyCode 其中一項",
+          })
+      )
+      .mutation(({ ctx, input }) => {
+        return updateUserPreferences(ctx.user.id, input);
+      }),
+  }),
+
   // ============ 推播通知設定 ============
   notifications: router({
     getSettings: protectedProcedure.query(({ ctx }) => {
@@ -649,6 +677,7 @@ export const appRouter = router({
           input.reminderDays
         );
       }),
+
   }),
 });
 

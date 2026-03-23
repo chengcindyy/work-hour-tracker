@@ -23,14 +23,24 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { zhTW } from "date-fns/locale";
 import { CalendarIcon, ChevronDown, Plus, Minus } from "lucide-react";
+import {
+  dateToYmdInVancouver,
+  formatPickerDateSlash,
+  vancouverTodayYmd,
+  ymdToPickerDate,
+} from "@/lib/vancouverTime";
+import { dateFnsLocaleForLng } from "@/i18n/dateLocale";
+import { useAppPreferences } from "@/contexts/AppPreferencesContext";
+import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 
 export default function Dashboard() {
-  const today = new Date();
-  const [workDate, setWorkDate] = useState<Date>(today);
+  const { t, i18n } = useTranslation();
+  const { formatMoney: formatCurrency } = useAppPreferences();
+  const [workDate, setWorkDate] = useState<Date>(() =>
+    ymdToPickerDate(vancouverTodayYmd())
+  );
   const [selectedShopId, setSelectedShopId] = useState<string>("");
   const [selectedServiceTypeId, setSelectedServiceTypeId] = useState<string>("");
   const [lineItems, setLineItems] = useState<
@@ -96,35 +106,27 @@ export default function Dashboard() {
     }
   }, [serviceTypes]);
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("zh-TW", {
-      style: "currency",
-      currency: "TWD",
-      minimumFractionDigits: 0,
-    }).format(value);
-  };
-
   const handleSubmit = async () => {
     if (!selectedWorkerId) {
-      toast.error("請先在右上角選擇成員後再新增工時");
+      toast.error(t("dashboard.toastSelectWorkerFirst"));
       return;
     }
     if (!selectedShopId) {
-      toast.error("請選擇店家");
+      toast.error(t("dashboard.toastSelectShop"));
       return;
     }
     if (hasNoServiceTypes) {
-      toast.error("所選店家尚無服務類型，無法新增工時");
+      toast.error(t("dashboard.toastNoServiceTypes"));
       return;
     }
     if (isCommissionShop) {
       if (!selectedServiceTypeId) {
-        toast.error("請選擇服務類型");
+        toast.error(t("dashboard.toastSelectServiceType"));
         return;
       }
       const amt = parseFloat(formData.serviceAmount);
       if (isNaN(amt) || amt <= 0) {
-        toast.error("請輸入服務總金額");
+        toast.error(t("dashboard.toastEnterAmount"));
         return;
       }
     } else {
@@ -132,7 +134,7 @@ export default function Dashboard() {
         (li) => li.serviceTypeId && li.hours && parseFloat(li.hours) > 0
       );
       if (validLineItems.length === 0) {
-        toast.error("時薪制請至少新增一筆項目（服務類型與時數）");
+        toast.error(t("dashboard.toastLineItemsRequired"));
         return;
       }
     }
@@ -144,7 +146,7 @@ export default function Dashboard() {
       const baseInput = {
         workerId: selectedWorkerId,
         shopId: parseInt(selectedShopId),
-        workDate: format(workDate, "yyyy-MM-dd"),
+        workDate: dateToYmdInVancouver(workDate),
         cashTips,
         cardTips,
         notes: formData.notes,
@@ -172,11 +174,11 @@ export default function Dashboard() {
                 })),
             }),
       });
-      toast.success("工時紀錄已新增");
+      toast.success(t("dashboard.toastSuccess"));
       utils.workRecords.list.invalidate();
       utils.stats.monthlyStats.invalidate();
 
-      setWorkDate(today);
+      setWorkDate(ymdToPickerDate(vancouverTodayYmd()));
       setSelectedShopId(shops?.[0]?.id.toString() ?? "");
       setSelectedServiceTypeId("");
       setLineItems([{ serviceTypeId: "", hours: "" }]);
@@ -188,11 +190,11 @@ export default function Dashboard() {
         notes: "",
       });
     } catch {
-      toast.error("操作失敗，請重試");
+      toast.error(t("dashboard.toastFail"));
     }
   };
 
-  const dateDisplayText = format(workDate, "yyyy/MM/dd", { locale: zhTW });
+  const dateDisplayText = formatPickerDateSlash(workDate);
 
   const estimatedEarnings = selectedShopId
     ? isCommissionShop
@@ -237,13 +239,13 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 max-w-lg">
       {/* Header */}
-      <h1 className="text-2xl font-semibold text-foreground">首頁</h1>
+      <h1 className="text-2xl font-semibold text-foreground">{t("dashboard.title")}</h1>
 
       {/* Form Card */}
       <Card className="p-5 space-y-5">
         {/* 工作日期 */}
         <div className="form-group">
-          <label className="form-label text-muted-foreground">工作日期</label>
+          <label className="form-label text-muted-foreground">{t("dashboard.workDate")}</label>
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -259,6 +261,7 @@ export default function Dashboard() {
                 mode="single"
                 selected={workDate}
                 onSelect={(d) => d && setWorkDate(d)}
+                locale={dateFnsLocaleForLng(i18n.language)}
               />
             </PopoverContent>
           </Popover>
@@ -266,18 +269,16 @@ export default function Dashboard() {
 
         {/* 店家 */}
         <div className="form-group">
-          <label className="form-label text-muted-foreground">店家</label>
+          <label className="form-label text-muted-foreground">{t("dashboard.shop")}</label>
           {!selectedWorkerId ? (
-            <p className="text-sm text-muted-foreground py-2">
-              請先在右上角選擇成員
-            </p>
+            <p className="text-sm text-muted-foreground py-2">{t("dashboard.selectMemberFirst")}</p>
           ) : shops && shops.length > 0 ? (
             <Select
               value={selectedShopId}
               onValueChange={setSelectedShopId}
             >
               <SelectTrigger className="h-11">
-                <SelectValue placeholder="選擇店家" />
+                <SelectValue placeholder={t("dashboard.selectShopPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {shops.map((shop) => (
@@ -289,11 +290,11 @@ export default function Dashboard() {
             </Select>
           ) : (
             <p className="text-sm text-muted-foreground py-2">
-              尚無店家，請先至{" "}
+              {t("dashboard.noShopsPrefix")}
               <Link href="/shops" className="text-primary underline">
-                Shops
-              </Link>{" "}
-              頁面新增店家
+                {t("nav.shops")}
+              </Link>
+              {t("dashboard.noShopsSuffix")}
             </p>
           )}
         </div>
@@ -302,17 +303,13 @@ export default function Dashboard() {
         {selectedShopId && (
           <>
             {hasNoServiceTypes && (
-              <p className="text-sm text-destructive">
-                所選店家尚無服務類型，無法新增工時
-              </p>
+              <p className="text-sm text-destructive">{t("dashboard.noServiceTypesWarning")}</p>
             )}
 
             {!hasNoServiceTypes && isCommissionShop && (
               <>
                 <div className="form-group">
-                  <label className="form-label text-muted-foreground">
-                    服務類型
-                  </label>
+                  <label className="form-label text-muted-foreground">{t("dashboard.serviceType")}</label>
                   {hasOneServiceType && serviceTypes && (
                     <div className="py-2.5 px-3 rounded-md border border-input bg-muted/30 text-foreground">
                       {serviceTypes[0].name}
@@ -324,7 +321,7 @@ export default function Dashboard() {
                       onValueChange={setSelectedServiceTypeId}
                     >
                       <SelectTrigger className="h-11">
-                        <SelectValue placeholder="選擇服務類型" />
+                        <SelectValue placeholder={t("dashboard.selectServiceTypePlaceholder")} />
                       </SelectTrigger>
                       <SelectContent>
                         {serviceTypes?.map((st) => (
@@ -337,9 +334,7 @@ export default function Dashboard() {
                   )}
                 </div>
                 <div className="form-group">
-                  <label className="form-label text-muted-foreground">
-                    服務金額
-                  </label>
+                  <label className="form-label text-muted-foreground">{t("dashboard.serviceAmount")}</label>
                   <Input
                     type="number"
                     inputMode="decimal"
@@ -356,14 +351,14 @@ export default function Dashboard() {
                     parseFloat(formData.serviceAmount) > 0 &&
                     selectedShop && (
                       <p className="text-xs text-muted-foreground mt-1.5">
-                        收入：{formatCurrency(estimatedEarnings)}
+                        {t("dashboard.earnings")}：{formatCurrency(estimatedEarnings)}
                         {parseFloat(
                           (selectedShop as any).shopCommissionRate as string ||
                             "0"
                         ) > 0 && (
                           <>
                             {" · "}
-                            抽成：
+                            {t("dashboard.commission")}：
                             {formatCurrency(
                               parseFloat(formData.serviceAmount) *
                                 parseFloat(
@@ -377,9 +372,7 @@ export default function Dashboard() {
                     )}
                 </div>
                 <div className="form-group">
-                  <label className="form-label text-muted-foreground">
-                    時數（選填）
-                  </label>
+                  <label className="form-label text-muted-foreground">{t("dashboard.hoursOptional")}</label>
                   <Input
                     type="number"
                     inputMode="decimal"
@@ -398,9 +391,7 @@ export default function Dashboard() {
 
             {!hasNoServiceTypes && !isCommissionShop && (
               <div className="form-group">
-                <label className="form-label text-muted-foreground">
-                  項目明細
-                </label>
+                <label className="form-label text-muted-foreground">{t("dashboard.lineItems")}</label>
                 <div className="space-y-2">
                   {lineItems.map((li, idx) => (
                     <div
@@ -418,12 +409,13 @@ export default function Dashboard() {
                         }
                       >
                         <SelectTrigger className="flex-1 min-w-0 h-11">
-                          <SelectValue placeholder="服務類型" />
+                          <SelectValue placeholder={t("dashboard.serviceType")} />
                         </SelectTrigger>
                         <SelectContent>
                           {serviceTypes?.map((st) => (
                             <SelectItem key={st.id} value={st.id.toString()}>
-                              {st.name} - {formatCurrency(parseFloat(st.hourlyPay as any))}/時
+                              {st.name} - {formatCurrency(parseFloat(st.hourlyPay as any))}
+                              {t("dashboard.perHour")}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -433,7 +425,7 @@ export default function Dashboard() {
                         inputMode="decimal"
                         step="0.5"
                         min="0"
-                        placeholder="時數"
+                        placeholder={t("dashboard.hoursPlaceholder")}
                         className="w-24 h-11"
                         value={li.hours}
                         onChange={(e) =>
@@ -471,7 +463,7 @@ export default function Dashboard() {
                     }
                   >
                     <Plus className="w-4 h-4 mr-1" />
-                    新增項目
+                    {t("dashboard.addLineItem")}
                   </Button>
                   {lineItems.some(
                     (li) =>
@@ -480,7 +472,7 @@ export default function Dashboard() {
                       parseFloat(li.hours) > 0
                   ) && (
                     <p className="text-xs text-muted-foreground">
-                      預估收入：{formatCurrency(estimatedEarnings)}
+                      {t("dashboard.estimatedEarnings")}：{formatCurrency(estimatedEarnings)}
                     </p>
                   )}
                 </div>
@@ -495,7 +487,7 @@ export default function Dashboard() {
                   size="sm"
                   className="w-full justify-between text-muted-foreground font-normal"
                 >
-                  小費（選填）
+                  {t("dashboard.tipsOptional")}
                   <ChevronDown
                     className={`h-4 w-4 transition-transform ${tipsOpen ? "rotate-180" : ""}`}
                   />
@@ -505,7 +497,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <div className="form-group">
                     <label className="form-label text-muted-foreground text-xs">
-                      現金小費
+                      {t("dashboard.cashTips")}
                     </label>
                     <Input
                       type="number"
@@ -522,7 +514,7 @@ export default function Dashboard() {
                   </div>
                   <div className="form-group">
                     <label className="form-label text-muted-foreground text-xs">
-                      刷卡小費
+                      {t("dashboard.cardTips")}
                     </label>
                     <Input
                       type="number"
@@ -549,7 +541,7 @@ export default function Dashboard() {
           disabled={isSubmitDisabled}
           className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90 mt-4"
         >
-          儲存
+          {t("dashboard.save")}
         </Button>
       </Card>
     </div>

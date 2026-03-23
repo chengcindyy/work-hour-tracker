@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useWorkerSelection } from "@/_core/hooks/useWorkers";
+import { useAppPreferences } from "@/contexts/AppPreferencesContext";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -18,6 +20,8 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export default function ShopsPage() {
+  const { t, i18n } = useTranslation();
+  const { formatMoney: formatCurrency } = useAppPreferences();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingShop, setEditingShop] = useState<any>(null);
   const [formData, setFormData] = useState({
@@ -63,6 +67,24 @@ export default function ShopsPage() {
   );
   const createServiceTypeMutation = trpc.serviceTypes.create.useMutation();
   const updateServiceTypeMutation = trpc.serviceTypes.update.useMutation();
+
+  const settlementBadgeForShop = (shop: any) => {
+    const st = shop.settlementType;
+    if (st === "month_end") return t("shops.badgeMonthEnd");
+    if (st === "fixed_dates" && shop.settlementDates) {
+      try {
+        const arr = JSON.parse(shop.settlementDates) as number[];
+        const sep = i18n.language === "en" ? ", " : "、";
+        return t("shops.badgeFixedDays", { days: arr?.join(sep) ?? "" });
+      } catch {
+        return t("shops.badgeFixedGeneric");
+      }
+    }
+    if (st === "cycle" && shop.settlementCycleDays) {
+      return t("shops.badgeCycleDays", { n: shop.settlementCycleDays });
+    }
+    return t("shops.badgeConfigured");
+  };
 
   const handleOpenDialog = (shop?: any) => {
     if (shop) {
@@ -120,13 +142,13 @@ export default function ShopsPage() {
 
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
-      toast.error("請輸入店家名稱");
+      toast.error(t("shops.toastNameRequired"));
       return;
     }
     if (formData.payType === "commission") {
       const pct = parseFloat(formData.shopCommissionRatePct);
       if (isNaN(pct) || pct < 0 || pct > 100) {
-        toast.error("抽成制請輸入店家抽成比例（0～100）");
+        toast.error(t("shops.toastCommissionPct"));
         return;
       }
     }
@@ -137,23 +159,23 @@ export default function ShopsPage() {
         .filter((n) => !isNaN(n) && n >= 1 && n <= 31);
       const unique = Array.from(new Set(dates)).sort((a, b) => a - b);
       if (unique.length === 0) {
-        toast.error("固定日期模式請輸入結算日（1～31，可多個以逗號分隔）");
+        toast.error(t("shops.toastFixedDates"));
         return;
       }
     }
     if (formData.settlementType === "cycle") {
       if (!formData.settlementAnchorDate) {
-        toast.error("週期制請選擇錨點結算日");
+        toast.error(t("shops.toastCycleAnchor"));
         return;
       }
       const days = parseInt(formData.settlementCycleDays, 10);
       if (isNaN(days) || days < 1 || days > 31) {
-        toast.error("週期天數請輸入 1～31");
+        toast.error(t("shops.toastCycleDays"));
         return;
       }
     }
     if (selectedWorkerId == null) {
-      toast.error("請先選擇成員");
+      toast.error(t("shops.toastSelectWorker"));
       return;
     }
     const shopCommissionRate =
@@ -204,37 +226,37 @@ export default function ShopsPage() {
           workerId: selectedWorkerId,
           ...basePayload,
         });
-        toast.success("店家已更新");
+        toast.success(t("shops.toastShopUpdated"));
       } else {
         await createShopMutation.mutateAsync({
           workerId: selectedWorkerId,
           ...basePayload,
         });
-        toast.success("店家已新增");
+        toast.success(t("shops.toastShopCreated"));
       }
       utils.shops.list.invalidate();
       handleCloseDialog();
-    } catch (error) {
-      toast.error("操作失敗，請重試");
+    } catch {
+      toast.error(t("shops.toastFail"));
     }
   };
 
   const handleDelete = async (shopId: number) => {
     if (selectedWorkerId == null) return;
-    if (confirm("確定要刪除此店家嗎？")) {
+    if (confirm(t("shops.deleteConfirm"))) {
       try {
         await deleteShopMutation.mutateAsync({ shopId, workerId: selectedWorkerId });
-        toast.success("店家已刪除");
+        toast.success(t("shops.toastShopDeleted"));
         utils.shops.list.invalidate();
-      } catch (error) {
-        toast.error("刪除失敗，請重試");
+      } catch {
+        toast.error(t("shops.toastDeleteFail"));
       }
     }
   };
 
   const handleOpenRatesDialog = (shopId: number) => {
     if (!selectedWorkerId) {
-      toast.error("請先在右上角選擇要設定時薪的成員");
+      toast.error(t("shops.toastSelectMemberRates"));
       return;
     }
     setRatesDialogShopId(shopId);
@@ -251,31 +273,29 @@ export default function ShopsPage() {
   const handleSaveServiceType = async () => {
     if (!ratesDialogShopId) return;
     if (!selectedWorkerId) {
-      toast.error("請先在右上角選擇成員");
+      toast.error(t("shops.toastSelectWorker"));
       return;
     }
     if (!ratesFormData.name.trim()) {
-      toast.error("請輸入服務類型名稱");
+      toast.error(t("shops.toastServiceNameRequired"));
       return;
     }
     const hourlyPay = isRatesDialogCommission ? 0 : parseFloat(ratesFormData.hourlyPay);
     if (!isRatesDialogCommission && (isNaN(hourlyPay) || hourlyPay <= 0)) {
-      toast.error("請輸入有效的時薪（大於 0）");
+      toast.error(t("shops.toastHourlyInvalid"));
       return;
     }
 
     try {
       if (editingServiceTypeId) {
-        // 更新既有服務類型
         await updateServiceTypeMutation.mutateAsync({
           serviceTypeId: editingServiceTypeId,
           name: ratesFormData.name.trim(),
           hourlyPay,
           description: ratesFormData.description.trim() || undefined,
         });
-        toast.success("服務類型已更新");
+        toast.success(t("shops.toastServiceUpdated"));
       } else {
-        // 新增新的服務類型
         await createServiceTypeMutation.mutateAsync({
           shopId: ratesDialogShopId,
           workerId: selectedWorkerId,
@@ -283,7 +303,7 @@ export default function ShopsPage() {
           hourlyPay,
           description: ratesFormData.description.trim() || undefined,
         });
-        toast.success("服務類型已新增");
+        toast.success(t("shops.toastServiceCreated"));
       }
 
       await utils.serviceTypes.listByShop.invalidate({
@@ -294,35 +314,28 @@ export default function ShopsPage() {
       setRatesFormData({ name: "", hourlyPay: "", description: "" });
       setEditingServiceTypeId(null);
     } catch {
-      toast.error("儲存失敗，請重試");
+      toast.error(t("shops.toastSaveFail"));
     }
   };
-
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("zh-TW", {
-      style: "currency",
-      currency: "TWD",
-      minimumFractionDigits: 0,
-    }).format(value);
 
   return (
     <div className="space-y-6">
       {/* 標題和按鈕 */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-foreground">店家管理</h1>
+        <h1 className="text-3xl font-bold text-foreground">{t("shops.title")}</h1>
         <Button
           onClick={() => handleOpenDialog()}
           disabled={selectedWorkerId == null}
           className="bg-primary text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="w-4 h-4 mr-2" />
-          新增店家
+          {t("shops.addShop")}
         </Button>
       </div>
 
       {selectedWorkerId == null ? (
         <Card className="p-6">
-          <p className="text-muted-foreground">請先在右上角選擇成員，才能管理該成員的店家。</p>
+          <p className="text-muted-foreground">{t("shops.selectMemberHint")}</p>
         </Card>
       ) : (
       <>
@@ -342,24 +355,13 @@ export default function ShopsPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-semibold text-foreground">{shop.name}</h3>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-slate-500 text-white">
-                        {(shop as any).payType === "commission" ? "抽成制" : "時薪制"}
+                        {(shop as any).payType === "commission"
+                          ? t("shops.payTypeCommission")
+                          : t("shops.payTypeHourly")}
                       </span>
                       {(shop as any).settlementType && (
                         <span className="text-xs px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 font-medium text-blue-700">
-                          {(() => {
-                            const st = (shop as any).settlementType;
-                            if (st === "month_end") return "結算：月底";
-                            if (st === "fixed_dates" && (shop as any).settlementDates) {
-                              try {
-                                const arr = JSON.parse((shop as any).settlementDates) as number[];
-                                return `結算：每月 ${arr?.join("、") ?? ""} 號`;
-                              } catch {}
-                              return "結算：固定日";
-                            }
-                            if (st === "cycle" && (shop as any).settlementCycleDays)
-                              return `結算：每 ${(shop as any).settlementCycleDays} 天`;
-                            return "結算已設定";
-                          })()}
+                          {settlementBadgeForShop(shop)}
                         </span>
                       )}
                     </div>
@@ -380,7 +382,9 @@ export default function ShopsPage() {
                   className="flex-1"
                 >
                   <DollarSign className="w-4 h-4 mr-1" />
-                  {(shop as any).payType === "commission" ? "服務類型" : "時薪設定"}
+                  {(shop as any).payType === "commission"
+                    ? t("shops.btnServiceTypes")
+                    : t("shops.btnRates")}
                 </Button>
                 <Button
                   variant="outline"
@@ -389,7 +393,7 @@ export default function ShopsPage() {
                   className="flex-1"
                 >
                   <Edit2 className="w-4 h-4 mr-1" />
-                  編輯
+                  {t("shops.edit")}
                 </Button>
                 <Button
                   variant="outline"
@@ -398,7 +402,7 @@ export default function ShopsPage() {
                   className="flex-1 text-destructive hover:text-destructive"
                 >
                   <Trash2 className="w-4 h-4 mr-1" />
-                  刪除
+                  {t("shops.delete")}
                 </Button>
               </div>
             </Card>
@@ -408,15 +412,13 @@ export default function ShopsPage() {
         <Card className="p-12">
           <div className="empty-state">
             <Store className="empty-state-icon" />
-            <div className="empty-state-title">暫無店家</div>
-            <div className="empty-state-description">
-              開始新增店家，管理您的工作地點
-            </div>
+            <div className="empty-state-title">{t("shops.emptyTitle")}</div>
+            <div className="empty-state-description">{t("shops.emptyDesc")}</div>
             <Button
               onClick={() => handleOpenDialog()}
               className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              新增店家
+              {t("shops.addShop")}
             </Button>
           </div>
         </Card>
@@ -430,18 +432,18 @@ export default function ShopsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {editingShop ? "編輯店家" : "新增店家"}
+              {editingShop ? t("shops.dialogEditTitle") : t("shops.dialogAddTitle")}
             </DialogTitle>
             <DialogDescription>
-              {editingShop ? "更新店家信息" : "添加新的工作地點"}
+              {editingShop ? t("shops.dialogEditDesc") : t("shops.dialogAddDesc")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="form-group">
-              <label className="form-label">店家名稱 *</label>
+              <label className="form-label">{t("shops.shopNameLabel")}</label>
               <Input
-                placeholder="例如：美容中心 A"
+                placeholder={t("shops.shopNamePlaceholder")}
                 value={formData.name}
                 onChange={(e) =>
                   setFormData({ ...formData, name: e.target.value })
@@ -450,9 +452,9 @@ export default function ShopsPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">描述</label>
+              <label className="form-label">{t("shops.descriptionLabel")}</label>
               <Textarea
-                placeholder="例如：位置、工作時間等"
+                placeholder={t("shops.descriptionPlaceholder")}
                 value={formData.description}
                 onChange={(e) =>
                   setFormData({ ...formData, description: e.target.value })
@@ -462,7 +464,7 @@ export default function ShopsPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">計薪方式</label>
+              <label className="form-label">{t("shops.payTypeLabel")}</label>
               <RadioGroup
                 value={formData.payType}
                 onValueChange={(v) =>
@@ -472,25 +474,25 @@ export default function ShopsPage() {
               >
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="hourly" id="payType-hourly" />
-                  <Label htmlFor="payType-hourly" className="cursor-pointer">時薪制</Label>
+                  <Label htmlFor="payType-hourly" className="cursor-pointer">{t("shops.payHourly")}</Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="commission" id="payType-commission" />
-                  <Label htmlFor="payType-commission" className="cursor-pointer">抽成制</Label>
+                  <Label htmlFor="payType-commission" className="cursor-pointer">{t("shops.payCommission")}</Label>
                 </div>
               </RadioGroup>
             </div>
 
             {formData.payType === "commission" && (
               <div className="form-group">
-                <label className="form-label">店家抽成比例</label>
+                <label className="form-label">{t("shops.commissionRateLabel")}</label>
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"
                     min="0"
                     max="100"
                     step="1"
-                    placeholder="例如：30 表示 30%"
+                    placeholder={t("shops.commissionPlaceholder")}
                     value={formData.shopCommissionRatePct}
                     onChange={(e) =>
                       setFormData({ ...formData, shopCommissionRatePct: e.target.value })
@@ -502,7 +504,7 @@ export default function ShopsPage() {
             )}
 
             <div className="form-group">
-              <label className="form-label">結算設定</label>
+              <label className="form-label">{t("shops.settlementLabel")}</label>
               <RadioGroup
                 value={formData.settlementType ?? "none"}
                 onValueChange={(v) =>
@@ -518,25 +520,25 @@ export default function ShopsPage() {
               >
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="none" id="settlement-none" />
-                  <Label htmlFor="settlement-none" className="cursor-pointer">無</Label>
+                  <Label htmlFor="settlement-none" className="cursor-pointer">{t("shops.settlementNone")}</Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="fixed_dates" id="settlement-fixed" />
-                  <Label htmlFor="settlement-fixed" className="cursor-pointer">固定每月幾號</Label>
+                  <Label htmlFor="settlement-fixed" className="cursor-pointer">{t("shops.settlementFixedOption")}</Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="month_end" id="settlement-month-end" />
-                  <Label htmlFor="settlement-month-end" className="cursor-pointer">每月月底</Label>
+                  <Label htmlFor="settlement-month-end" className="cursor-pointer">{t("shops.settlementMonthEndOption")}</Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="cycle" id="settlement-cycle" />
-                  <Label htmlFor="settlement-cycle" className="cursor-pointer">週期制（每 N 天）</Label>
+                  <Label htmlFor="settlement-cycle" className="cursor-pointer">{t("shops.settlementCycleOption")}</Label>
                 </div>
               </RadioGroup>
               {formData.settlementType === "fixed_dates" && (
                 <Input
                   className="mt-2"
-                  placeholder="例如：8, 23（每月 8 號、23 號結算）"
+                  placeholder={t("shops.fixedDatesPlaceholder")}
                   value={formData.settlementDatesInput}
                   onChange={(e) =>
                     setFormData({ ...formData, settlementDatesInput: e.target.value })
@@ -546,7 +548,7 @@ export default function ShopsPage() {
               {formData.settlementType === "cycle" && (
                 <div className="mt-2 space-y-2">
                   <div>
-                    <label className="text-sm text-muted-foreground">錨點結算日</label>
+                    <label className="text-sm text-muted-foreground">{t("shops.anchorDateLabel")}</label>
                     <Input
                       type="date"
                       className="mt-1"
@@ -580,7 +582,7 @@ export default function ShopsPage() {
                 onClick={handleCloseDialog}
                 className="flex-1"
               >
-                取消
+                {t("common.cancel")}
               </Button>
               <Button
                 onClick={handleSubmit}
@@ -589,7 +591,7 @@ export default function ShopsPage() {
                 }
                 className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                {editingShop ? "更新" : "新增"}
+                {editingShop ? t("common.update") : t("common.add")}
               </Button>
             </div>
           </div>
@@ -604,19 +606,19 @@ export default function ShopsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {isRatesDialogCommission ? "服務類型" : "時薪設定"} - {ratesDialogShop?.name ?? ""}
+              {isRatesDialogCommission ? t("shops.ratesTitleCommission") : t("shops.ratesTitleHourly")} - {ratesDialogShop?.name ?? ""}
             </DialogTitle>
             <DialogDescription>
               {isRatesDialogCommission
-                ? "管理此店家的服務類型（用於分類）"
-                : "管理此店家的服務類型與時薪"}
+                ? t("shops.ratesDescCommission")
+                : t("shops.ratesDescHourly")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {/* 現有服務類型列表 */}
             <div className="form-group">
-              <label className="form-label">現有服務類型</label>
+              <label className="form-label">{t("shops.existingListLabel")}</label>
               {serviceTypes && serviceTypes.length > 0 ? (
                 <ul className="rounded-md border border-input bg-muted/30 p-3 space-y-2">
                   {serviceTypes.map((st) => (
@@ -637,25 +639,26 @@ export default function ShopsPage() {
                       </span>
                       {!isRatesDialogCommission && (
                         <span className="text-muted-foreground">
-                          {formatCurrency(parseFloat(st.hourlyPay as string))}/小時
+                          {formatCurrency(parseFloat(st.hourlyPay as string))}
+                          {t("shops.perHourShort")}
                         </span>
                       )}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground py-2">尚無服務類型</p>
+                <p className="text-sm text-muted-foreground py-2">{t("shops.noServiceTypes")}</p>
               )}
             </div>
 
             {/* 新增 / 編輯 服務類型表單 */}
             <div className="form-group">
               <label className="form-label">
-                {editingServiceTypeId ? "編輯服務類型" : "新增服務類型"}
+                {editingServiceTypeId ? t("shops.labelEditService") : t("shops.labelAddService")}
               </label>
               <div className="space-y-3">
                 <Input
-                  placeholder="服務類型名稱 *"
+                  placeholder={t("shops.serviceNamePh")}
                   value={ratesFormData.name}
                   onChange={(e) =>
                     setRatesFormData({ ...ratesFormData, name: e.target.value })
@@ -666,7 +669,7 @@ export default function ShopsPage() {
                     type="number"
                     min="0"
                     step="0.01"
-                    placeholder="時薪 *"
+                    placeholder={t("shops.hourlyPh")}
                     value={ratesFormData.hourlyPay}
                     onChange={(e) =>
                       setRatesFormData({
@@ -677,7 +680,7 @@ export default function ShopsPage() {
                   />
                 )}
                 <Textarea
-                  placeholder="描述（選填）"
+                  placeholder={t("shops.descOptionalPh")}
                   value={ratesFormData.description}
                   onChange={(e) =>
                     setRatesFormData({
@@ -697,11 +700,11 @@ export default function ShopsPage() {
                 >
                   {editingServiceTypeId
                     ? updateServiceTypeMutation.isPending
-                      ? "更新中..."
-                      : "更新服務類型"
+                      ? t("shops.btnUpdating")
+                      : t("shops.btnUpdateService")
                     : createServiceTypeMutation.isPending
-                    ? "新增中..."
-                    : "新增服務類型"}
+                      ? t("shops.btnAdding")
+                      : t("shops.btnAddService")}
                 </Button>
               </div>
             </div>

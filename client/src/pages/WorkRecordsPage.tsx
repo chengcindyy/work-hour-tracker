@@ -21,8 +21,21 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Edit2, Trash2, Plus, Clock, Minus, ChevronDown, CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
+import { dateFnsLocaleForLng } from "@/i18n/dateLocale";
+import { useAppPreferences } from "@/contexts/AppPreferencesContext";
+import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
+import {
+  dateToYmdInVancouver,
+  formatPickerDateSlash,
+  formatWorkDateSlash,
+  formatWorkWeekdayLong,
+  getCalendarPartsInZone,
+  vancouverCurrentMonthPickerRange,
+  vancouverMonthPickerRangeOffset,
+  vancouverTodayYmd,
+  ymdToPickerDate,
+} from "@/lib/vancouverTime";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   Collapsible,
@@ -38,20 +51,15 @@ import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
 
 export default function WorkRecordsPage() {
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
-
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
   const [selectedShopId, setSelectedShopId] = useState<string>("");
   const [selectedServiceTypeId, setSelectedServiceTypeId] = useState<string>("");
   const [lineItems, setLineItems] = useState<{ serviceTypeId: string; hours: string }[]>([{ serviceTypeId: "", hours: "" }]);
   const [filterShopId, setFilterShopId] = useState<string>("");
-  const [dateRange, setDateRangeRaw] = useState<DateRange | undefined>(() => ({
-    from: new Date(currentYear, currentMonth - 1, 1),
-    to: new Date(currentYear, currentMonth, 0),
-  }));
+  const [dateRange, setDateRangeRaw] = useState<DateRange | undefined>(() =>
+    vancouverCurrentMonthPickerRange()
+  );
   const setDateRange = (val: DateRange | undefined) => {
     const hadComplete = !!(dateRange?.from && dateRange?.to);
     const sameFrom = dateRange?.from?.getTime() === val?.from?.getTime();
@@ -62,17 +70,18 @@ export default function WorkRecordsPage() {
       setDateRangeRaw(val);
     }
   };
+  const vanMonthDefault = vancouverCurrentMonthPickerRange();
   const filterStartDate = dateRange?.from
-    ? format(dateRange.from, "yyyy-MM-dd")
-    : format(new Date(currentYear, currentMonth - 1, 1), "yyyy-MM-dd");
+    ? dateToYmdInVancouver(dateRange.from)
+    : dateToYmdInVancouver(vanMonthDefault.from);
   const filterEndDate = dateRange?.to
-    ? format(dateRange.to, "yyyy-MM-dd")
+    ? dateToYmdInVancouver(dateRange.to)
     : dateRange?.from
-      ? format(dateRange.from, "yyyy-MM-dd")
-      : format(new Date(currentYear, currentMonth, 0), "yyyy-MM-dd");
+      ? dateToYmdInVancouver(dateRange.from)
+      : dateToYmdInVancouver(vanMonthDefault.to);
 
   const [formData, setFormData] = useState({
-    workDate: format(new Date(), "yyyy-MM-dd"),
+    workDate: vancouverTodayYmd(),
     hours: "",
     serviceAmount: "",
     cashTips: "",
@@ -83,6 +92,8 @@ export default function WorkRecordsPage() {
   const { selectedWorkerId } = useWorkerSelection();
   const [, navigate] = useLocation();
   const isMobile = useIsMobile();
+  const { t, i18n } = useTranslation();
+  const { formatMoney: formatCurrency } = useAppPreferences();
 
   const { data: shops } = trpc.shops.list.useQuery(
     { workerId: selectedWorkerId! },
@@ -125,27 +136,25 @@ export default function WorkRecordsPage() {
   const isCommissionShop = (selectedShop as any)?.payType === "commission";
 
   const setDateRangeThisYear = () => {
-    const y = currentYear;
+    const y = getCalendarPartsInZone().year;
     setDateRange({
-      from: new Date(y, 0, 1),
-      to: new Date(y, 11, 31),
+      from: ymdToPickerDate(`${y}-01-01`),
+      to: ymdToPickerDate(`${y}-12-31`),
     });
   };
   const setDateRangeLastMonth = () => {
-    const base = dateRange?.from ?? new Date(currentYear, currentMonth - 1, 1);
-    const d = new Date(base.getFullYear(), base.getMonth() - 1, 1);
-    setDateRange({
-      from: new Date(d.getFullYear(), d.getMonth(), 1),
-      to: new Date(d.getFullYear(), d.getMonth() + 1, 0),
-    });
+    const baseYmd = dateRange?.from
+      ? dateToYmdInVancouver(dateRange.from)
+      : vancouverTodayYmd();
+    const { from, to } = vancouverMonthPickerRangeOffset(baseYmd, -1);
+    setDateRange({ from, to });
   };
   const setDateRangeNextMonth = () => {
-    const base = dateRange?.from ?? new Date(currentYear, currentMonth - 1, 1);
-    const d = new Date(base.getFullYear(), base.getMonth() + 1, 1);
-    setDateRange({
-      from: new Date(d.getFullYear(), d.getMonth(), 1),
-      to: new Date(d.getFullYear(), d.getMonth() + 1, 0),
-    });
+    const baseYmd = dateRange?.from
+      ? dateToYmdInVancouver(dateRange.from)
+      : vancouverTodayYmd();
+    const { from, to } = vancouverMonthPickerRangeOffset(baseYmd, 1);
+    setDateRange({ from, to });
   };
 
   const handleOpenDialog = (record?: any) => {
@@ -171,7 +180,7 @@ export default function WorkRecordsPage() {
         ]);
       }
       setFormData({
-        workDate: (record.workDate as string) || format(new Date(), "yyyy-MM-dd"),
+        workDate: (record.workDate as string) || vancouverTodayYmd(),
         hours: record.hours != null ? parseFloat(record.hours as any).toString() : "",
         serviceAmount: hasServiceAmount ? parseFloat(record.serviceAmount as any).toString() : "",
         cashTips: parseFloat((record as any).cashTips as any)?.toString() ?? "0",
@@ -185,7 +194,7 @@ export default function WorkRecordsPage() {
       setSelectedServiceTypeId("");
       setLineItems([{ serviceTypeId: "", hours: "" }]);
       setFormData({
-        workDate: format(new Date(), "yyyy-MM-dd"),
+        workDate: vancouverTodayYmd(),
         hours: "",
         serviceAmount: "",
         cashTips: "",
@@ -224,25 +233,25 @@ export default function WorkRecordsPage() {
 
   const handleSubmit = async () => {
     if (!selectedWorkerId) {
-      toast.error("請先在右上角選擇成員後再新增工時");
+      toast.error(t("records.toastSelectWorker"));
       return;
     }
     if (!selectedShopId) {
-      toast.error("請填寫所有必填項目");
+      toast.error(t("records.toastRequired"));
       return;
     }
     if (hasNoServiceTypes) {
-      toast.error("所選店家尚無服務類型，無法新增工時");
+      toast.error(t("records.toastNoServiceTypes"));
       return;
     }
     if (isCommissionShop) {
       if (!selectedServiceTypeId) {
-        toast.error("請選擇服務類型");
+        toast.error(t("records.toastSelectServiceType"));
         return;
       }
       const amt = parseFloat(formData.serviceAmount);
       if (isNaN(amt) || amt <= 0) {
-        toast.error("請輸入服務總金額");
+        toast.error(t("records.toastEnterAmount"));
         return;
       }
     } else {
@@ -250,7 +259,7 @@ export default function WorkRecordsPage() {
         (li) => li.serviceTypeId && li.hours && parseFloat(li.hours) > 0
       );
       if (validLineItems.length === 0) {
-        toast.error("時薪制請至少新增一筆項目（服務類型與時數）");
+        toast.error(t("records.toastLineItems"));
         return;
       }
     }
@@ -284,7 +293,7 @@ export default function WorkRecordsPage() {
                   .map((li) => ({ serviceTypeId: parseInt(li.serviceTypeId), hours: parseFloat(li.hours) })),
               }),
         });
-        toast.success("工時紀錄已更新");
+        toast.success(t("records.toastUpdated"));
       } else {
         await createRecordMutation.mutateAsync({
           ...baseInput,
@@ -300,35 +309,27 @@ export default function WorkRecordsPage() {
                   .map((li) => ({ serviceTypeId: parseInt(li.serviceTypeId), hours: parseFloat(li.hours) })),
               }),
         });
-        toast.success("工時紀錄已新增");
+        toast.success(t("records.toastCreated"));
       }
       utils.workRecords.list.invalidate();
       utils.stats.monthlyStats.invalidate();
       handleCloseDialog();
-    } catch (error) {
-      toast.error("操作失敗，請重試");
+    } catch {
+      toast.error(t("records.toastFail"));
     }
   };
 
   const handleDelete = async (recordId: number) => {
-    if (confirm("確定要刪除此工時紀錄嗎？")) {
+    if (confirm(t("records.deleteConfirm"))) {
       try {
         await deleteRecordMutation.mutateAsync({ recordId });
-        toast.success("工時紀錄已刪除");
+        toast.success(t("records.toastDeleted"));
         utils.workRecords.list.invalidate();
         utils.stats.monthlyStats.invalidate();
-      } catch (error) {
-        toast.error("刪除失敗，請重試");
+      } catch {
+        toast.error(t("records.toastDeleteFail"));
       }
     }
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("zh-TW", {
-      style: "currency",
-      currency: "TWD",
-      minimumFractionDigits: 0,
-    }).format(value);
   };
 
   const filterContent = (
@@ -336,16 +337,16 @@ export default function WorkRecordsPage() {
       {/* 第一行：店家 + 日期範圍（桌面版並排） */}
       <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-3 md:items-end">
         <div className="form-group min-w-0 gap-1.5">
-          <label className="form-label text-xs">店家</label>
+          <label className="form-label text-xs">{t("records.shopFilter")}</label>
           <Select
             value={filterShopId || "all"}
             onValueChange={(v) => setFilterShopId(v === "all" ? "" : v)}
           >
             <SelectTrigger className="h-9 w-full md:w-[160px]">
-              <SelectValue placeholder="全部店家" />
+              <SelectValue placeholder={t("records.allShops")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部店家</SelectItem>
+              <SelectItem value="all">{t("records.allShops")}</SelectItem>
               {shops?.map((shop) => (
                 <SelectItem key={shop.id} value={shop.id.toString()}>
                   {shop.name}
@@ -355,7 +356,7 @@ export default function WorkRecordsPage() {
           </Select>
         </div>
         <div className="form-group min-w-0 gap-1.5">
-          <label className="form-label text-xs">日期範圍</label>
+          <label className="form-label text-xs">{t("records.dateRange")}</label>
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -367,15 +368,15 @@ export default function WorkRecordsPage() {
                   {dateRange?.from ? (
                     dateRange.to ? (
                       dateRange.from.getTime() === dateRange.to.getTime() ? (
-                        format(dateRange.from, "yyyy/MM/dd")
+                        formatPickerDateSlash(dateRange.from)
                       ) : (
-                        `${format(dateRange.from, "yyyy/MM/dd")} - ${format(dateRange.to, "yyyy/MM/dd")}`
+                        `${formatPickerDateSlash(dateRange.from)} - ${formatPickerDateSlash(dateRange.to)}`
                       )
                     ) : (
-                      format(dateRange.from, "yyyy/MM/dd")
+                      formatPickerDateSlash(dateRange.from)
                     )
                   ) : (
-                    "選擇日期範圍"
+                    t("records.pickDateRange")
                   )}
                 </span>
               </Button>
@@ -386,6 +387,7 @@ export default function WorkRecordsPage() {
                 selected={dateRange}
                 onSelect={setDateRange}
                 numberOfMonths={isMobile ? 1 : 2}
+                locale={dateFnsLocaleForLng(i18n.language)}
               />
             </PopoverContent>
           </Popover>
@@ -395,13 +397,13 @@ export default function WorkRecordsPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1.5">
           <Button variant="outline" size="sm" onClick={setDateRangeThisYear} className="h-8 text-xs px-2.5">
-            今年
+            {t("records.thisYear")}
           </Button>
           <Button variant="outline" size="sm" onClick={setDateRangeLastMonth} className="h-8 text-xs px-2.5">
-            上個月
+            {t("records.lastMonth")}
           </Button>
           <Button variant="outline" size="sm" onClick={setDateRangeNextMonth} className="h-8 text-xs px-2.5">
-            下個月
+            {t("records.nextMonth")}
           </Button>
           <Button
             variant="ghost"
@@ -409,18 +411,15 @@ export default function WorkRecordsPage() {
             className="h-8 text-xs px-2.5"
             onClick={() => {
               setFilterShopId("");
-              setDateRange({
-                from: new Date(currentYear, currentMonth - 1, 1),
-                to: new Date(currentYear, currentMonth, 0),
-              });
+              setDateRange(vancouverCurrentMonthPickerRange());
             }}
           >
-            清除篩選
+            {t("records.clearFilters")}
           </Button>
         </div>
         {filteredRecords.length > 0 && (
           <p className="text-xs text-muted-foreground">
-            共 {filteredRecords.length} 筆紀錄
+            {t("records.recordCount", { count: filteredRecords.length })}
           </p>
         )}
       </div>
@@ -449,10 +448,10 @@ export default function WorkRecordsPage() {
           <CollapsibleTrigger asChild>
             <button className="flex items-center justify-between w-full text-left py-0.5 -mt-0.5">
               <span className="font-medium text-foreground">
-                篩選
+                {t("records.filter")}
                 {filteredRecords.length > 0 && (
                   <span className="text-muted-foreground font-normal ml-2">
-                    （共 {filteredRecords.length} 筆）
+                    {t("records.filterCount", { count: filteredRecords.length })}
                   </span>
                 )}
               </span>
@@ -482,17 +481,21 @@ export default function WorkRecordsPage() {
               <>服務 {formatCurrency(serviceAmount)} → 收入 {formatCurrency(parseFloat(record.totalEarnings as any))}{shopCommissionAmount > 0 && `，抽成 ${formatCurrency(shopCommissionAmount)}`}</>
             ) : rec.lineItems && rec.lineItems.length > 0 ? (
               <>
-                {rec.lineItems
-                  .map((li) => `${li.serviceTypeName ?? "項目"} ${li.hours}h × ${formatCurrency(li.hourlyPay)}`)
-                  .join("、")}
+                Total{" "}
+                {Number(
+                  rec.lineItems.reduce((sum, li) => sum + li.hours, 0).toFixed(2)
+                )}{" "}
+                小時
               </>
             ) : (
-              <>{(record.hours != null ? parseFloat(record.hours as any) : 0).toFixed(1)} 小時 × {formatCurrency(record.hourlyPay != null ? parseFloat(record.hourlyPay as any) : 0)}</>
+              <>
+                Total{" "}
+                {Number(
+                  (record.hours != null ? parseFloat(record.hours as any) : 0).toFixed(2)
+                )}{" "}
+                小時
+              </>
             );
-            const serviceLabel =
-              isCommissionRecord || !rec.lineItems?.length
-                ? (serviceTypes?.find((st) => st.id === record.serviceTypeId)?.name ?? "服務")
-                : rec.lineItems.map((li) => li.serviceTypeName ?? "項目").join("、");
             const cash = parseFloat((record as any).cashTips as any) || 0;
             const cardTips = parseFloat((record as any).cardTips as any) || 0;
             const hasTips = cash > 0 || cardTips > 0;
@@ -511,14 +514,18 @@ export default function WorkRecordsPage() {
                       </div>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {(record.workDate as string) || ""} · {serviceLabel}
+                      {formatWorkDateSlash((record.workDate as string) || "")} ·{" "}
+                      {formatWorkWeekdayLong((record.workDate as string) || "")}
                     </div>
                     <div className="text-sm text-muted-foreground">
                       {detailText}
                     </div>
                     {hasTips && (
                       <div className="text-sm text-accent">
-                        小費：現金 {formatCurrency(cash)} / 刷卡 {formatCurrency(cardTips)}
+                        {t("records.tipsLine", {
+                          cash: formatCurrency(cash),
+                          card: formatCurrency(cardTips),
+                        })}
                       </div>
                     )}
                   </div>
@@ -528,7 +535,7 @@ export default function WorkRecordsPage() {
                       size={isMobile ? "default" : "sm"}
                       className="min-h-10 min-w-10 sm:min-w-0"
                       onClick={() => handleOpenDialog(record)}
-                      aria-label="編輯"
+                      aria-label={t("records.ariaEdit")}
                     >
                       <Edit2 className="w-4 h-4" />
                     </Button>
@@ -537,7 +544,7 @@ export default function WorkRecordsPage() {
                       size={isMobile ? "default" : "sm"}
                       className="min-h-10 min-w-10 sm:min-w-0 text-destructive hover:text-destructive"
                       onClick={() => handleDelete(record.id)}
-                      aria-label="刪除"
+                      aria-label={t("records.ariaDelete")}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -553,27 +560,26 @@ export default function WorkRecordsPage() {
             <Clock className="empty-state-icon" />
             <div className="empty-state-title">
               {workRecords && workRecords.length > 0
-                ? "此篩選條件下無紀錄"
-                : "暫無工時紀錄"}
+                ? t("records.emptyFilteredTitle")
+                : t("records.emptyTitle")}
             </div>
             <div className="empty-state-description">
               {workRecords && workRecords.length > 0
-                ? "試試調整店家或日期範圍"
-                : "開始新增工時紀錄，追蹤您的工作時間"}
+                ? t("records.emptyFilteredDesc")
+                : t("records.emptyDesc")}
             </div>
             <Button
               onClick={() =>
                 workRecords && workRecords.length > 0
                   ? (setFilterShopId(""),
-                    setDateRange({
-                      from: new Date(currentYear, currentMonth - 1, 1),
-                      to: new Date(currentYear, currentMonth, 0),
-                    }))
+                    setDateRange(vancouverCurrentMonthPickerRange()))
                   : navigate("/dashboard")
               }
               className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              {workRecords && workRecords.length > 0 ? "清除篩選" : "新增工時"}
+              {workRecords && workRecords.length > 0
+                ? t("records.clearFilters")
+                : t("records.addFromDashboard")}
             </Button>
           </div>
         </Card>
@@ -584,16 +590,16 @@ export default function WorkRecordsPage() {
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingRecord ? "編輯工時紀錄" : "新增工時紀錄"}
+              {editingRecord ? t("records.dialogEditTitle") : t("records.dialogAddTitle")}
             </DialogTitle>
             <DialogDescription>
-              {editingRecord ? "更新工時信息" : "記錄您的工作時間和收入"}
+              {editingRecord ? t("records.dialogEditDesc") : t("records.dialogAddDesc")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="form-group">
-              <label className="form-label">店家 *</label>
+              <label className="form-label">{t("records.shopRequired")}</label>
               <Select
                 value={selectedShopId}
                 onValueChange={(value) => {
@@ -604,7 +610,7 @@ export default function WorkRecordsPage() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="選擇店家" />
+                  <SelectValue placeholder={t("records.selectShop")} />
                 </SelectTrigger>
                 <SelectContent>
                   {shops?.map((shop) => (
@@ -618,9 +624,9 @@ export default function WorkRecordsPage() {
 
             {isCommissionShop ? (
               <div className="form-group">
-                <label className="form-label">服務類型 *</label>
+                <label className="form-label">{t("records.serviceTypeRequired")}</label>
                 {hasNoServiceTypes && (
-                  <p className="text-sm text-destructive mt-1">所選店家尚無服務類型，無法新增工時</p>
+                  <p className="text-sm text-destructive mt-1">{t("records.noServiceTypesWarning")}</p>
                 )}
                 {hasOneServiceType && serviceTypes && (
                   <p className="text-sm text-muted-foreground py-2 px-3 rounded-md border border-input bg-muted/30">
@@ -630,7 +636,7 @@ export default function WorkRecordsPage() {
                 {hasMultipleServiceTypes && (
                   <Select value={selectedServiceTypeId} onValueChange={setSelectedServiceTypeId}>
                     <SelectTrigger>
-                      <SelectValue placeholder="選擇服務類型" />
+                      <SelectValue placeholder={t("records.selectServiceType")} />
                     </SelectTrigger>
                     <SelectContent>
                       {serviceTypes?.map((st) => (
@@ -644,9 +650,9 @@ export default function WorkRecordsPage() {
               </div>
             ) : (
               <div className="form-group">
-                <label className="form-label">項目明細 *</label>
+                <label className="form-label">{t("records.lineItemsRequired")}</label>
                 {hasNoServiceTypes && (
-                  <p className="text-sm text-destructive mt-1">所選店家尚無服務類型，無法新增工時</p>
+                  <p className="text-sm text-destructive mt-1">{t("records.noServiceTypesWarning")}</p>
                 )}
                 <div className="space-y-2">
                   {lineItems.map((li, idx) => (
@@ -660,12 +666,13 @@ export default function WorkRecordsPage() {
                         }
                       >
                         <SelectTrigger className="flex-1 min-w-0">
-                          <SelectValue placeholder="服務類型" />
+                          <SelectValue placeholder={t("dashboard.serviceType")} />
                         </SelectTrigger>
                         <SelectContent>
                           {serviceTypes?.map((st) => (
                             <SelectItem key={st.id} value={st.id.toString()}>
-                              {st.name} - {formatCurrency(parseFloat(st.hourlyPay as any))}/時
+                              {st.name} - {formatCurrency(parseFloat(st.hourlyPay as any))}
+                              {t("records.perHour")}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -674,7 +681,7 @@ export default function WorkRecordsPage() {
                         type="number"
                         step="0.5"
                         min="0"
-                        placeholder="時數"
+                        placeholder={t("records.hoursPh")}
                         className="w-24"
                         value={li.hours}
                         onChange={(e) =>
@@ -703,11 +710,11 @@ export default function WorkRecordsPage() {
                     onClick={() => setLineItems((prev) => [...prev, { serviceTypeId: "", hours: "" }])}
                   >
                     <Plus className="w-4 h-4 mr-1" />
-                    新增項目
+                    {t("records.addLine")}
                   </Button>
                   {lineItems.some((li) => li.serviceTypeId && li.hours && parseFloat(li.hours) > 0) && (
                     <p className="text-xs text-muted-foreground">
-                      預估收入：{formatCurrency(
+                      {t("records.estimatedIncome")}：{formatCurrency(
                         lineItems.reduce((sum, li) => {
                           if (!li.serviceTypeId || !li.hours) return sum;
                           const st = serviceTypes?.find((s) => s.id.toString() === li.serviceTypeId);
@@ -723,7 +730,7 @@ export default function WorkRecordsPage() {
             )}
 
             <div className="form-group">
-              <label className="form-label">工作日期 *</label>
+              <label className="form-label">{t("records.workDateRequired")}</label>
               <Input
                 type="date"
                 value={formData.workDate}
@@ -737,7 +744,7 @@ export default function WorkRecordsPage() {
               {isCommissionShop && (
                 <>
                   <div className="form-group">
-                    <label className="form-label">服務總金額 *</label>
+                    <label className="form-label">{t("records.serviceTotalRequired")}</label>
                     <Input
                       type="number"
                       step="10"
@@ -750,19 +757,19 @@ export default function WorkRecordsPage() {
                     />
                     {formData.serviceAmount && parseFloat(formData.serviceAmount) > 0 && selectedShop && (
                       <p className="text-xs text-muted-foreground mt-1">
-                        收入：{formatCurrency(
+                        {t("records.incomeLabel")}：{formatCurrency(
                           parseFloat(formData.serviceAmount) * (1 - parseFloat((selectedShop as any).shopCommissionRate as string || "0")) +
                             (parseFloat(formData.cashTips) || 0) + (parseFloat(formData.cardTips) || 0)
                         )}
                         {" · "}
-                        抽成：{formatCurrency(
+                        {t("records.commissionLabel")}：{formatCurrency(
                           parseFloat(formData.serviceAmount) * parseFloat((selectedShop as any).shopCommissionRate as string || "0")
                         )}
                       </p>
                     )}
                   </div>
                   <div className="form-group">
-                    <label className="form-label">時數（選填）</label>
+                    <label className="form-label">{t("records.hoursOptional")}</label>
                     <Input
                       type="number"
                       step="0.5"
@@ -774,14 +781,14 @@ export default function WorkRecordsPage() {
                       }
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      填寫後可計算總工時與平均時薪
+                      {t("records.hoursOptionalHint")}
                     </p>
                   </div>
                 </>
               )}
 
               <div className="form-group">
-                <label className="form-label">現金小費</label>
+                <label className="form-label">{t("records.cashTips")}</label>
                 <Input
                   type="number"
                   step="10"
@@ -794,7 +801,7 @@ export default function WorkRecordsPage() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">刷卡小費</label>
+                <label className="form-label">{t("records.cardTips")}</label>
                 <Input
                   type="number"
                   step="10"
@@ -809,9 +816,9 @@ export default function WorkRecordsPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">備註</label>
+              <label className="form-label">{t("records.notes")}</label>
               <Textarea
-                placeholder="例如：特殊情況、額外說明"
+                placeholder={t("records.notesPlaceholder")}
                 value={formData.notes}
                 onChange={(e) =>
                   setFormData({ ...formData, notes: e.target.value })
@@ -826,7 +833,7 @@ export default function WorkRecordsPage() {
                 onClick={handleCloseDialog}
                 className="flex-1"
               >
-                取消
+                {t("common.cancel")}
               </Button>
               <Button
                 onClick={handleSubmit}
@@ -839,7 +846,7 @@ export default function WorkRecordsPage() {
                 }
                 className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                {editingRecord ? "更新" : "新增"}
+                {editingRecord ? t("common.update") : t("common.add")}
               </Button>
             </div>
           </div>

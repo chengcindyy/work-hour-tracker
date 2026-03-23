@@ -1,4 +1,4 @@
-const CACHE_NAME = "work-hour-tracker-v2";
+const CACHE_NAME = "work-hour-tracker-v3";
 const urlsToCache = [
   "/",
   "/index.html",
@@ -146,11 +146,18 @@ self.addEventListener("push", (event) => {
     icon: "/android-chrome-192x192.png",
     badge: "/android-chrome-192x192.png",
     tag,
+    renotify: true,
+    vibrate: [200, 100, 200],
+    silent: false,
     requireInteraction: false,
   };
 
   event.waitUntil(
-    self.registration.showNotification(title, options)
+    self.registration.showNotification(title, options).then(() => {
+      if (navigator.setAppBadge) {
+        return navigator.setAppBadge();
+      }
+    })
   );
 });
 
@@ -159,20 +166,25 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   event.waitUntil(
-    clients.matchAll({ type: "window" }).then((clientList) => {
-      // 檢查是否已有打開的窗口（client.url 為完整 URL，如 http://localhost:3000/ 或 /settings）
-      const origin = self.location.origin;
-      for (let i = 0; i < clientList.length; i++) {
-        const client = clientList[i];
-        if (client.url.startsWith(origin) && "focus" in client) {
-          return client.focus();
+    Promise.resolve()
+      .then(() => {
+        if (navigator.clearAppBadge) {
+          return navigator.clearAppBadge();
         }
-      }
-      // 如果沒有打開的窗口，打開新窗口
-      if (clients.openWindow) {
-        return clients.openWindow("/");
-      }
-    })
+      })
+      .then(() => clients.matchAll({ type: "window" }))
+      .then((clientList) => {
+        const origin = self.location.origin;
+        for (let i = 0; i < clientList.length; i++) {
+          const client = clientList[i];
+          if (client.url.startsWith(origin) && "focus" in client) {
+            return client.focus();
+          }
+        }
+        if (clients.openWindow) {
+          return clients.openWindow("/");
+        }
+      })
   );
 });
 

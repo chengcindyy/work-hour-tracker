@@ -1,33 +1,48 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useWorkerSelection } from "@/_core/hooks/useWorkers";
-import { trpc } from "@/lib/trpc";
+import { useAppPreferences } from "@/contexts/AppPreferencesContext";
+import type { AppLocale } from "@/i18n/config";
+import { SUPPORTED_LOCALES } from "@/i18n/config";
+import { SUPPORTED_DISPLAY_CURRENCIES } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { toast } from "sonner";
+import { useUpdateAvailable } from "@/hooks/useUpdateAvailable";
+import { formatWorkDateSlash } from "@/lib/vancouverTime";
+import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { Bell, ChevronDown, Download, RefreshCw, Save, UserPlus } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { useUpdateAvailable } from "@/hooks/useUpdateAvailable";
-
-const DAYS_OF_WEEK = [
-  { value: 0, label: "周日" },
-  { value: 1, label: "周一" },
-  { value: 2, label: "周二" },
-  { value: 3, label: "周三" },
-  { value: 4, label: "周四" },
-  { value: 5, label: "周五" },
-  { value: 6, label: "周六" },
-];
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function SettingsPage() {
+  const { t, i18n } = useTranslation();
+  const { applyFromServer, currencyCode: displayCurrencyCode } = useAppPreferences();
+  const daysOfWeek = useMemo(
+    () =>
+      [0, 1, 2, 3, 4, 5, 6].map((value) => ({
+        value,
+        label: t(`day.${value}`),
+      })),
+    [t]
+  );
+
   const { selectedWorkerId, workers, setSelectedWorkerId } = useWorkerSelection();
-  const { hasUpdate } = useUpdateAvailable();
+  const { hasUpdate, markUpdateAcknowledged } = useUpdateAvailable();
   const { data: notificationSettings } = trpc.notifications.getSettings.useQuery();
   const updateNotificationsMutation = trpc.notifications.updateSettings.useMutation();
   const savePushSubscriptionMutation = trpc.notifications.savePushSubscription.useMutation();
@@ -42,6 +57,22 @@ export default function SettingsPage() {
   );
   const utils = trpc.useUtils();
 
+  const { data: userPrefs, isLoading: userPrefsLoading } =
+    trpc.userPreferences.get.useQuery();
+  const updateUserPrefsMutation = trpc.userPreferences.update.useMutation({
+    onSuccess: (data) => {
+      applyFromServer({
+        uiLocale: (data.uiLocale === "en" ? "en" : "zh-TW") as AppLocale,
+        currencyCode: data.currencyCode,
+      });
+      void utils.userPreferences.get.invalidate();
+      toast.success(t("settings.toastPreferencesSaved"));
+    },
+    onError: () => {
+      toast.error(t("settings.toastSaveFailed"));
+    },
+  });
+
   const createWorkerMutation = trpc.workers.create.useMutation();
   const updateWorkerMutation = trpc.workers.update.useMutation();
   const archiveWorkerMutation = trpc.workers.archive.useMutation();
@@ -50,7 +81,6 @@ export default function SettingsPage() {
   const [reminderTime, setReminderTime] = useState("09:00");
   const [reminderDays, setReminderDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [newWorkerName, setNewWorkerName] = useState("");
-  /** 正在重新命名的成員 id，非 null 時該列顯示輸入框 */
   const [editingWorkerId, setEditingWorkerId] = useState<number | null>(null);
   const [editingWorkerName, setEditingWorkerName] = useState("");
 
@@ -85,16 +115,16 @@ export default function SettingsPage() {
 
   const subscribeToPush = async (): Promise<boolean> => {
     if (!vapidData?.publicKey) {
-      toast.error("推播服務尚未設定（請確認 .env 已設定 VAPID 金鑰並重啟伺服器）");
+      toast.error(t("settings.toastPushNotConfigured"));
       return false;
     }
     if (!("Notification" in window) || !("serviceWorker" in navigator)) {
-      toast.error("此瀏覽器不支援推播通知");
+      toast.error(t("settings.toastPushUnsupported"));
       return false;
     }
     const permission = await Notification.requestPermission();
     if (permission !== "granted") {
-      toast.error("已拒絕推播權限，請在瀏覽器設定中允許通知");
+      toast.error(t("settings.toastPushDenied"));
       return false;
     }
     try {
@@ -115,12 +145,12 @@ export default function SettingsPage() {
         });
         return true;
       }
-      toast.error("訂閱格式異常，請重試或換瀏覽器");
+      toast.error(t("settings.toastPushBadPayload"));
       return false;
     } catch (err) {
       console.error("[Push] Subscribe failed:", err);
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`訂閱失敗：${msg}`);
+      toast.error(t("settings.toastPushSubscribeFail", { msg }));
       return false;
     }
   };
@@ -136,22 +166,22 @@ export default function SettingsPage() {
       if (isEnabled) {
         const ok = await subscribeToPush();
         if (ok) {
-          toast.success("推播設定已保存");
+          toast.success(t("settings.toastNotificationsSaved"));
         } else {
-          toast.warning("推播設定已保存，但訂閱未完成，請點「訂閱推播」重試");
+          toast.warning(t("settings.toastNotificationsSavedNoSub"));
         }
       } else {
-        toast.success("推播設定已保存");
+        toast.success(t("settings.toastNotificationsSaved"));
       }
-    } catch (error) {
-      toast.error("保存失敗，請重試");
+    } catch {
+      toast.error(t("settings.toastSaveFailed"));
     }
   };
 
   const handleSaveRename = async (workerId: number) => {
     const name = editingWorkerName.trim();
     if (!name) {
-      toast.error("請輸入成員名稱");
+      toast.error(t("settings.toastWorkerNameRequired"));
       return;
     }
     try {
@@ -162,7 +192,7 @@ export default function SettingsPage() {
       await utils.workers.list.invalidate();
       setEditingWorkerId(null);
       setEditingWorkerName("");
-      toast.success("成員名稱已更新");
+      toast.success(t("settings.toastWorkerRenamed"));
     } catch (err: unknown) {
       const msg =
         err instanceof TRPCClientError
@@ -170,30 +200,37 @@ export default function SettingsPage() {
           : err && typeof err === "object" && "message" in err
             ? String((err as { message: unknown }).message)
             : "";
-      toast.error(msg || "更新成員名稱失敗");
+      toast.error(msg || t("settings.toastWorkerRenameFail"));
     }
   };
 
   const handleExportAllData = () => {
     if (!selectedWorkerId) {
-      toast.error("請先選擇成員再匯出資料");
+      toast.error(t("settings.toastExportNeedWorker"));
       return;
     }
 
     if (!workRecords || workRecords.length === 0) {
-      toast.error("此成員目前無數據可匯出");
+      toast.error(t("settings.toastExportNoData"));
       return;
     }
 
     try {
-      let csv = "工時紀錄完整備份\n\n";
-      csv += "日期,店家,服務類型,時數,時薪,現金小費,刷卡小費,項目收入,備註\n";
+      let csv = `${t("settings.exportCsvTitle")}\n\n`;
+      csv += `${t("settings.exportCsvHeader")}\n`;
 
       workRecords.forEach((record) => {
-        const workDate = new Date(record.workDate).toLocaleDateString("zh-TW");
+        const workDate = formatWorkDateSlash(record.workDate as string);
         const cashTips = parseFloat((record as any).cashTips as any) || 0;
         const cardTips = parseFloat((record as any).cardTips as any) || 0;
-        const rec = record as typeof record & { lineItems?: { serviceTypeId: number; hours: number; hourlyPay: number; serviceTypeName?: string }[] };
+        const rec = record as typeof record & {
+          lineItems?: {
+            serviceTypeId: number;
+            hours: number;
+            hourlyPay: number;
+            serviceTypeName?: string;
+          }[];
+        };
         if (rec.lineItems && rec.lineItems.length > 0) {
           rec.lineItems.forEach((li, i) => {
             const itemEarnings = li.hours * li.hourlyPay;
@@ -212,17 +249,16 @@ export default function SettingsPage() {
       link.setAttribute("href", url);
       link.setAttribute("download", `work-records-${new Date().toISOString().split("T")[0]}.csv`);
       link.click();
-      toast.success("數據已匯出");
-    } catch (error) {
-      toast.error("匯出失敗");
+      toast.success(t("settings.toastExported"));
+    } catch {
+      toast.error(t("settings.toastExportFail"));
     }
   };
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-foreground">設定</h1>
+      <h1 className="text-3xl font-bold text-foreground">{t("settings.title")}</h1>
 
-      {/* 檢查更新 - 置頂，可收合，有更新時顯示黃色 */}
       <Collapsible defaultOpen={false} className="group">
         <Card
           className={
@@ -232,15 +268,13 @@ export default function SettingsPage() {
           }
         >
           <CollapsibleTrigger asChild>
-            <button className="flex w-full items-center justify-between px-4 text-left">
+            <button type="button" className="flex w-full items-center justify-between px-4 text-left">
               <div className="flex items-center gap-3">
                 <RefreshCw className="h-5 w-5 text-primary shrink-0" />
                 <div>
-                  <h2 className="font-semibold text-foreground">檢查更新</h2>
+                  <h2 className="font-semibold text-foreground">{t("settings.checkUpdateTitle")}</h2>
                   <p className="text-sm text-muted-foreground">
-                    {hasUpdate
-                      ? "有新版本可用，請點擊展開並按「檢查更新」取得最新內容"
-                      : "您的 App 目前為最新版本"}
+                    {hasUpdate ? t("settings.checkUpdateHasNew") : t("settings.checkUpdateUpToDate")}
                   </p>
                 </div>
               </div>
@@ -249,13 +283,12 @@ export default function SettingsPage() {
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="border-t px-4 pt-3">
-              <p className="text-sm text-muted-foreground mb-3">
-                若 App 未自動更新至最新版本，點此可強制取得最新內容（無需移除主畫面圖示）
-              </p>
+              <p className="text-sm text-muted-foreground mb-3">{t("settings.checkUpdateHelp")}</p>
               <Button
                 variant="outline"
                 onClick={async () => {
                   try {
+                    markUpdateAcknowledged();
                     const reg = await navigator.serviceWorker.getRegistration();
                     if (reg) {
                       await reg.unregister();
@@ -268,25 +301,24 @@ export default function SettingsPage() {
                 className="gap-2"
               >
                 <RefreshCw className="w-4 h-4" />
-                檢查更新
+                {t("settings.checkUpdateButton")}
               </Button>
             </div>
           </CollapsibleContent>
         </Card>
       </Collapsible>
 
-      {/* 成員管理 */}
       <Card className="p-4 sm:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-3">
             <UserPlus className="w-6 h-6 text-primary shrink-0" />
-            <h2 className="text-2xl font-semibold text-foreground">成員管理</h2>
+            <h2 className="text-2xl font-semibold text-foreground">{t("settings.workersTitle")}</h2>
           </div>
           {workers.length > 0 && selectedWorkerId != null && (
             <div className="text-sm text-muted-foreground truncate">
-              目前選擇：{" "}
+              {t("settings.workersCurrent")}{" "}
               <span className="font-medium text-foreground">
-                {workers.find(w => w.id === selectedWorkerId)?.name ?? "-"}
+                {workers.find((w) => w.id === selectedWorkerId)?.name ?? "-"}
               </span>
             </div>
           )}
@@ -294,14 +326,12 @@ export default function SettingsPage() {
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <div className="font-medium text-foreground">已建立的成員</div>
+            <div className="font-medium text-foreground">{t("settings.workersListLabel")}</div>
             {workers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                尚未建立任何成員，請先新增成員。
-              </p>
+              <p className="text-sm text-muted-foreground">{t("settings.workersEmpty")}</p>
             ) : (
               <div className="space-y-2">
-                {workers.map(worker => {
+                {workers.map((worker) => {
                   const isEditing = editingWorkerId === worker.id;
                   return (
                     <div
@@ -313,9 +343,9 @@ export default function SettingsPage() {
                           <Input
                             className="w-full sm:max-w-[200px]"
                             value={editingWorkerName}
-                            onChange={e => setEditingWorkerName(e.target.value)}
-                            placeholder="成員名稱"
-                            onKeyDown={e => {
+                            onChange={(e) => setEditingWorkerName(e.target.value)}
+                            placeholder={t("settings.workerNamePlaceholder")}
+                            onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
                                 void handleSaveRename(worker.id);
@@ -338,7 +368,7 @@ export default function SettingsPage() {
                               }
                               onClick={() => handleSaveRename(worker.id)}
                             >
-                              儲存
+                              {t("common.save")}
                             </Button>
                             <Button
                               size="sm"
@@ -348,7 +378,7 @@ export default function SettingsPage() {
                                 setEditingWorkerName("");
                               }}
                             >
-                              取消
+                              {t("common.cancel")}
                             </Button>
                           </div>
                         </>
@@ -357,7 +387,7 @@ export default function SettingsPage() {
                           <div className="min-w-0">
                             <div className="font-medium text-foreground truncate">{worker.name}</div>
                             {selectedWorkerId === worker.id && (
-                              <div className="text-xs text-primary mt-1">目前選擇的成員</div>
+                              <div className="text-xs text-primary mt-1">{t("settings.workerSelectedBadge")}</div>
                             )}
                           </div>
                           <div className="flex flex-wrap gap-2 shrink-0">
@@ -366,7 +396,7 @@ export default function SettingsPage() {
                               variant={selectedWorkerId === worker.id ? "default" : "outline"}
                               onClick={() => setSelectedWorkerId(worker.id)}
                             >
-                              選擇此成員
+                              {t("settings.selectThisWorker")}
                             </Button>
                             <Button
                               size="sm"
@@ -377,18 +407,14 @@ export default function SettingsPage() {
                                 setEditingWorkerName(worker.name);
                               }}
                             >
-                              重新命名
+                              {t("settings.rename")}
                             </Button>
                             <Button
                               size="sm"
                               variant="ghost"
                               className="text-destructive hover:text-destructive"
                               onClick={async () => {
-                                if (
-                                  !window.confirm(
-                                    "確定要移除此成員嗎？相關工時仍會保留，但無法再選擇為目前成員。"
-                                  )
-                                ) {
+                                if (!window.confirm(t("settings.archiveConfirm"))) {
                                   return;
                                 }
                                 try {
@@ -399,13 +425,13 @@ export default function SettingsPage() {
                                     setSelectedWorkerId(null);
                                   }
                                   await utils.workers.list.invalidate();
-                                  toast.success("成員已移除");
+                                  toast.success(t("settings.toastWorkerRemoved"));
                                 } catch {
-                                  toast.error("移除成員失敗");
+                                  toast.error(t("settings.toastWorkerRemoveFail"));
                                 }
                               }}
                             >
-                              移除成員
+                              {t("settings.removeWorker")}
                             </Button>
                           </div>
                         </>
@@ -418,88 +444,137 @@ export default function SettingsPage() {
           </div>
 
           <div className="border-t border-border/60 pt-4 space-y-3">
-            <div className="font-medium text-foreground">新增成員</div>
+            <div className="font-medium text-foreground">{t("settings.addWorkerSection")}</div>
             <div className="flex flex-col sm:flex-row gap-2">
               <Input
-                placeholder="請輸入成員名稱"
+                placeholder={t("settings.addWorkerPlaceholder")}
                 value={newWorkerName}
-                onChange={e => setNewWorkerName(e.target.value)}
+                onChange={(e) => setNewWorkerName(e.target.value)}
               />
               <Button
                 onClick={async () => {
                   const name = newWorkerName.trim();
                   if (!name) {
-                    toast.error("請輸入成員名稱");
+                    toast.error(t("settings.toastWorkerNameRequired"));
                     return;
                   }
                   try {
                     const created = await createWorkerMutation.mutateAsync({ name });
                     setNewWorkerName("");
                     await utils.workers.list.invalidate();
-                    // 若尚未選擇成員，新增後預設選中
                     if (!selectedWorkerId) {
                       setSelectedWorkerId(created.id);
                     }
-                    toast.success("已新增成員");
+                    toast.success(t("settings.toastWorkerAdded"));
                   } catch {
-                    toast.error("新增成員失敗，請重試");
+                    toast.error(t("settings.toastWorkerAddFail"));
                   }
                 }}
                 disabled={createWorkerMutation.isPending}
                 className="sm:w-auto w-full bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                新增成員
+                {t("settings.addWorkerButton")}
               </Button>
             </div>
           </div>
         </div>
       </Card>
 
-      {/* 推播通知設定 */}
+      <Card className="p-4 sm:p-6 space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">{t("settings.languageSection")}</h2>
+          <p className="text-sm text-muted-foreground mt-1">{t("settings.languageHint")}</p>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <Label htmlFor="settings-lang" className="text-sm text-muted-foreground shrink-0">
+            {t("language.label")}
+          </Label>
+          <Select
+            value={
+              userPrefs?.uiLocale ??
+              (i18n.language === "en" ? "en" : "zh-TW")
+            }
+            disabled={userPrefsLoading || updateUserPrefsMutation.isPending}
+            onValueChange={(v) => {
+              void updateUserPrefsMutation.mutateAsync({
+                uiLocale: v as AppLocale,
+              });
+            }}
+          >
+            <SelectTrigger id="settings-lang" className="w-full sm:w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SUPPORTED_LOCALES.map((code) => (
+                <SelectItem key={code} value={code}>
+                  {code === "zh-TW" ? t("language.zhTW") : t("language.en")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1 border-t border-border/60">
+          <Label htmlFor="settings-currency" className="text-sm text-muted-foreground shrink-0">
+            {t("settings.currencyLabel")}
+          </Label>
+          <Select
+            value={userPrefs?.currencyCode ?? displayCurrencyCode}
+            disabled={userPrefsLoading || updateUserPrefsMutation.isPending}
+            onValueChange={(v) => {
+              void updateUserPrefsMutation.mutateAsync({
+                currencyCode: v as (typeof SUPPORTED_DISPLAY_CURRENCIES)[number],
+              });
+            }}
+          >
+            <SelectTrigger id="settings-currency" className="w-full sm:w-[200px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SUPPORTED_DISPLAY_CURRENCIES.map((code) => (
+                <SelectItem key={code} value={code}>
+                  {t(`settings.currency.${code}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-xs text-muted-foreground">{t("settings.currencyHint")}</p>
+      </Card>
+
       <Card className="p-6 space-y-6">
         <div className="flex items-center gap-3">
           <Bell className="w-6 h-6 text-primary" />
-          <h2 className="text-2xl font-semibold text-foreground">推播通知</h2>
+          <h2 className="text-2xl font-semibold text-foreground">{t("settings.pushTitle")}</h2>
         </div>
 
         <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
-          <div className="font-medium mb-1">iPhone / iOS 使用者請注意</div>
-          <p className="text-muted-foreground dark:text-amber-200/90">
-            推播通知需先將本 App「加入主畫面」後才能使用。請在 Safari 中點選分享按鈕 →「加入主畫面」，之後從主畫面圖示開啟 App 即可接收推播。
-          </p>
+          <div className="font-medium mb-1">{t("settings.pushIosTitle")}</div>
+          <p className="text-muted-foreground dark:text-amber-200/90">{t("settings.pushIosBody")}</p>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-medium text-foreground">啟用推播通知</div>
-              <div className="text-sm text-muted-foreground">
-                接收每日工時登記提醒
-              </div>
+              <div className="font-medium text-foreground">{t("settings.pushEnable")}</div>
+              <div className="text-sm text-muted-foreground">{t("settings.pushEnableDesc")}</div>
             </div>
-            <Switch
-              checked={isEnabled}
-              onCheckedChange={setIsEnabled}
-            />
+            <Switch checked={isEnabled} onCheckedChange={setIsEnabled} />
           </div>
 
           {isEnabled && (
             <>
               <div className="form-group">
-                <label className="form-label">提醒時間</label>
-                <Input
-                  type="time"
-                  value={reminderTime}
-                  onChange={(e) => setReminderTime(e.target.value)}
-                />
+                <label className="form-label">{t("settings.reminderTime")}</label>
+                <Input type="time" value={reminderTime} onChange={(e) => setReminderTime(e.target.value)} />
               </div>
 
               <div className="form-group">
-                <label className="form-label">提醒日期</label>
+                <label className="form-label">{t("settings.reminderDays")}</label>
                 <div className="grid grid-cols-7 gap-2">
-                  {DAYS_OF_WEEK.map((day) => (
+                  {daysOfWeek.map((day) => (
                     <button
                       key={day.value}
+                      type="button"
                       onClick={() => handleToggleDay(day.value)}
                       className={`p-2 rounded text-sm font-medium transition-colors ${
                         reminderDays.includes(day.value)
@@ -515,10 +590,8 @@ export default function SettingsPage() {
 
               {!vapidData?.publicKey && (
                 <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-                  <strong>「訂閱推播」按鈕無法點擊？</strong>
-                  <p className="mt-1">
-                    請確認 .env 已設定 VAPID_PUBLIC_KEY 和 VAPID_PRIVATE_KEY（執行 <code className="bg-amber-200/50 px-1 rounded">pnpm run generate-vapid</code> 產生），並<strong>重啟 dev 伺服器</strong>（Ctrl+C 後重新執行 pnpm dev）。
-                  </p>
+                  <strong>{t("settings.pushVapidHintTitle")}</strong>
+                  <p className="mt-1">{t("settings.pushVapidHintBody")}</p>
                 </div>
               )}
               <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
@@ -528,17 +601,19 @@ export default function SettingsPage() {
                   className="bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   <Save className="w-4 h-4 mr-2" />
-                  保存設定
+                  {t("settings.saveSettings")}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={async () => {
                     const ok = await subscribeToPush();
-                    if (ok) toast.success("訂閱成功");
+                    if (ok) toast.success(t("settings.toastSubscribeOk"));
                   }}
                   disabled={savePushSubscriptionMutation.isPending || !vapidData?.publicKey}
                 >
-                  {savePushSubscriptionMutation.isPending ? "訂閱中..." : "訂閱推播"}
+                  {savePushSubscriptionMutation.isPending
+                    ? t("settings.subscribing")
+                    : t("settings.subscribePush")}
                 </Button>
               </div>
             </>
@@ -546,69 +621,56 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      {/* 數據匯出 */}
       <Card className="p-6 space-y-6">
         <div className="flex items-center gap-3">
           <Download className="w-6 h-6 text-secondary" />
-          <h2 className="text-2xl font-semibold text-foreground">數據匯出</h2>
+          <h2 className="text-2xl font-semibold text-foreground">{t("settings.exportTitle")}</h2>
         </div>
 
         <div className="space-y-4">
           <div>
-            <div className="font-medium text-foreground">匯出所有工時紀錄</div>
-            <div className="text-sm text-muted-foreground">
-              將所有工時紀錄匯出為 CSV 檔案，用於備份或進一步分析
-            </div>
+            <div className="font-medium text-foreground">{t("settings.exportHeading")}</div>
+            <div className="text-sm text-muted-foreground">{t("settings.exportDesc")}</div>
           </div>
 
-          <Button
-            onClick={handleExportAllData}
-            variant="outline"
-            className="flex items-center gap-2"
-          >
+          <Button onClick={handleExportAllData} variant="outline" className="flex items-center gap-2">
             <Download className="w-4 h-4" />
-            匯出 CSV
+            {t("settings.exportCsv")}
           </Button>
         </div>
       </Card>
 
-      {/* 關於應用 */}
       <Card className="p-6 space-y-4 bg-muted/30">
-        <h2 className="text-xl font-semibold text-foreground">關於應用</h2>
+        <h2 className="text-xl font-semibold text-foreground">{t("settings.aboutTitle")}</h2>
         <div className="space-y-2 text-sm text-muted-foreground">
           <p>
-            <span className="font-medium text-foreground">應用名稱：</span>
-            工時登記系統
+            <span className="font-medium text-foreground">{t("settings.aboutNameLabel")}</span>
+            {t("settings.aboutName")}
           </p>
           <p>
-            <span className="font-medium text-foreground">版本：</span>
+            <span className="font-medium text-foreground">{t("settings.aboutVersionLabel")}</span>
             1.0.0
           </p>
           <p>
-            <span className="font-medium text-foreground">功能：</span>
-            為按摩師和兼職工作者設計的工時登記和統計系統
+            <span className="font-medium text-foreground">{t("settings.aboutFeaturesLabel")}</span>
+            {t("settings.aboutFeatures")}
           </p>
-          <p className="pt-2">
-            本應用支持 PWA 技術，可在離線狀態下使用。您的所有數據都安全地存儲在服務器上。
-          </p>
+          <p className="pt-2">{t("settings.aboutPwa")}</p>
         </div>
       </Card>
 
-      {/* PWA 安裝提示 */}
       <Card className="p-6 space-y-4 bg-secondary/10 border-secondary/30">
-        <h2 className="text-xl font-semibold text-foreground">安裝應用</h2>
+        <h2 className="text-xl font-semibold text-foreground">{t("settings.installTitle")}</h2>
         <div className="space-y-2 text-sm text-muted-foreground">
-          <p>
-            您可以將此應用安裝到您的設備上，以便隨時隨地快速訪問。
-          </p>
+          <p>{t("settings.installIntro")}</p>
           <ul className="list-disc list-inside space-y-1 ml-2">
             <li>
-              <span className="font-medium text-foreground">iOS：</span>
-              打開 Safari，點擊分享按鈕，選擇「加入主畫面」
+              <span className="font-medium text-foreground">{t("settings.installIos")}</span>{" "}
+              {t("settings.installIosSteps")}
             </li>
             <li>
-              <span className="font-medium text-foreground">Android：</span>
-              打開 Chrome，點擊菜單，選擇「安裝應用」
+              <span className="font-medium text-foreground">{t("settings.installAndroid")}</span>{" "}
+              {t("settings.installAndroidSteps")}
             </li>
           </ul>
         </div>

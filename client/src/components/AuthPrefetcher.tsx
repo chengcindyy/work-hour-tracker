@@ -11,9 +11,20 @@ export function AuthPrefetcher() {
   const utils = trpc.useUtils();
 
   useEffect(() => {
-    void utils.auth.me.prefetch(undefined, {
-      staleTime: 5000,
-    });
+    void (async () => {
+      try {
+        const me = await utils.auth.me.fetch(undefined, {
+          staleTime: 5000,
+        });
+        if (me) {
+          await utils.userPreferences.get.prefetch(undefined, {
+            staleTime: 60_000,
+          });
+        }
+      } catch {
+        /* 未登入 */
+      }
+    })();
   }, [utils]);
 
   return null;

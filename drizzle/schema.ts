@@ -169,3 +169,21 @@ export const pushSubscriptions = pgTable("pushSubscriptions", {
 
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
+
+/**
+ * 帳號層級 UI 偏好：介面語言與金額顯示幣別（多裝置同步）
+ */
+export const userPreferences = pgTable("userPreferences", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  uiLocale: varchar("uiLocale", { length: 16 }).notNull().default("zh-TW"),
+  currencyCode: varchar("currencyCode", { length: 8 }).notNull().default("CAD"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type UserPreferenceRow = typeof userPreferences.$inferSelect;
+export type InsertUserPreferenceRow = typeof userPreferences.$inferInsert;

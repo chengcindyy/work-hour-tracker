@@ -23,7 +23,8 @@ import {
 import { useIsMobile } from "@/hooks/useMobile";
 import { useUpdateAvailable } from "@/hooks/useUpdateAvailable";
 import { LayoutDashboard, LogOut, Store, FileText, BarChart3, Settings } from "lucide-react";
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation, Link } from "wouter";
 import { toast } from "sonner";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -35,14 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-
-const menuItems = [
-  { icon: LayoutDashboard, label: "首頁", path: "/dashboard" },
-  { icon: Store, label: "店家設定", path: "/shops" },
-  { icon: FileText, label: "工時紀錄", path: "/records" },
-  { icon: BarChart3, label: "統計", path: "/stats" },
-  { icon: Settings, label: "設定", path: "/settings" },
-];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
@@ -98,6 +91,17 @@ function DashboardLayoutContent({
   children,
   setSidebarWidth,
 }: DashboardLayoutContentProps) {
+  const { t } = useTranslation();
+  const menuItems = useMemo(
+    () => [
+      { icon: LayoutDashboard, label: t("nav.home"), path: "/dashboard" },
+      { icon: Store, label: t("nav.shops"), path: "/shops" },
+      { icon: FileText, label: t("nav.records"), path: "/records" },
+      { icon: BarChart3, label: t("nav.stats"), path: "/stats" },
+      { icon: Settings, label: t("nav.settings"), path: "/settings" },
+    ],
+    [t]
+  );
   const { user, logout } = useAuth();
   const { hasUpdate } = useUpdateAvailable();
   const hasShownUpdateToast = useRef(false);
@@ -120,15 +124,15 @@ function DashboardLayoutContent({
   useEffect(() => {
     if (hasUpdate && !hasShownUpdateToast.current) {
       hasShownUpdateToast.current = true;
-      toast.info("應用程式有新版本", {
-        description: "請到設定頁面點選「檢查更新」以取得最新版本",
+      toast.info(t("layout.updateToastTitle"), {
+        description: t("layout.updateToastDesc"),
         action: {
-          label: "前往設定",
+          label: t("layout.updateToastAction"),
           onClick: () => navigate("/settings"),
         },
       });
     }
-  }, [hasUpdate]);
+  }, [hasUpdate, navigate, t]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -173,18 +177,18 @@ function DashboardLayoutContent({
               <button
                 onClick={toggleSidebar}
                 className="flex flex-col items-center gap-2 hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-ring w-full"
-                aria-label="切換導航"
+                aria-label={t("layout.toggleNav")}
               >
                 <img
                   src="/clock-icon.png"
-                  alt="工時登記系統"
+                  alt={t("layout.appTitle")}
                   className={`object-contain transition-all duration-200 ${
                     isCollapsed ? "w-8 h-8" : "w-20 h-20"
                   }`}
                 />
                 {!isCollapsed && (
                   <span className="font-bold text-sm tracking-tight text-foreground text-center leading-tight">
-                    工時登記系統
+                    {t("layout.appTitle")}
                   </span>
                 )}
               </button>
@@ -244,7 +248,7 @@ function DashboardLayoutContent({
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  <span>登出</span>
+                  <span>{t("layout.logout")}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -268,7 +272,7 @@ function DashboardLayoutContent({
               <div className="flex items-center gap-3">
                 <div className="flex flex-col gap-1">
                   <span className="tracking-tight text-foreground">
-                    {activeMenuItem?.label ?? "選單"}
+                    {activeMenuItem?.label ?? t("layout.menuFallback")}
                   </span>
                 </div>
               </div>
@@ -280,14 +284,14 @@ function DashboardLayoutContent({
         <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-3">
           <div className="flex flex-col">
             <span className="text-xs text-muted-foreground uppercase tracking-wide">
-              目前成員
+              {t("layout.currentWorker")}
             </span>
             <span className="text-sm text-foreground font-medium">
               {workersLoading
-                ? "載入中..."
+                ? t("common.loading")
                 : workers.length === 0
-                ? "尚未建立成員"
-                : workers.find(w => w.id === selectedWorkerId)?.name ?? "未選擇"}
+                  ? t("layout.noWorkersYet")
+                  : workers.find(w => w.id === selectedWorkerId)?.name ?? t("layout.workerNotSelected")}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -302,7 +306,9 @@ function DashboardLayoutContent({
               disabled={workersLoading || workers.length === 0}
             >
               <SelectTrigger className="w-40">
-                <SelectValue placeholder={workersLoading ? "載入中..." : "選擇成員"} />
+                <SelectValue
+                  placeholder={workersLoading ? t("common.loading") : t("layout.selectWorkerPlaceholder")}
+                />
               </SelectTrigger>
               <SelectContent>
                 {workers.map(worker => (
@@ -317,7 +323,7 @@ function DashboardLayoutContent({
                 href="/settings"
                 onClick={() => isMobile && setOpenMobile(false)}
               >
-                成員管理
+                {t("layout.manageWorkers")}
               </Link>
             </Button>
           </div>

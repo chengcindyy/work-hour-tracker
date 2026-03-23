@@ -21,21 +21,28 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Download, ChevronDown, CalendarIcon } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import { useIsMobile } from "@/hooks/useMobile";
+import {
+  dateToYmdInVancouver,
+  formatPickerDateSlash,
+  getCalendarPartsInZone,
+  vancouverCurrentMonthPickerRange,
+} from "@/lib/vancouverTime";
 import type { DateRange } from "react-day-picker";
+import { dateFnsLocaleForLng } from "@/i18n/dateLocale";
+import { useAppPreferences } from "@/contexts/AppPreferencesContext";
+import { useTranslation } from "react-i18next";
 
 export default function StatsPage() {
-  const now = new Date();
+  const vanNow = getCalendarPartsInZone();
   const [viewMode, setViewMode] = useState<"monthly" | "settlement" | "dateRange">("monthly");
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear().toString());
-  const [selectedMonth, setSelectedMonth] = useState((now.getMonth() + 1).toString());
+  const [selectedYear, setSelectedYear] = useState(vanNow.year.toString());
+  const [selectedMonth, setSelectedMonth] = useState(vanNow.month.toString());
   const [selectedShopIds, setSelectedShopIds] = useState<number[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<{ startDate: string; endDate: string; label: string } | null>(null);
-  const [dateRange, setDateRangeRaw] = useState<DateRange | undefined>(() => ({
-    from: new Date(now.getFullYear(), now.getMonth(), 1),
-    to: new Date(now.getFullYear(), now.getMonth() + 1, 0),
-  }));
+  const [dateRange, setDateRangeRaw] = useState<DateRange | undefined>(() =>
+    vancouverCurrentMonthPickerRange()
+  );
   const setDateRange = (val: DateRange | undefined) => {
     const hadComplete = !!(dateRange?.from && dateRange?.to);
     const sameFrom = dateRange?.from?.getTime() === val?.from?.getTime();
@@ -48,6 +55,8 @@ export default function StatsPage() {
   };
   const { selectedWorkerId } = useWorkerSelection();
   const isMobile = useIsMobile();
+  const { t, i18n } = useTranslation();
+  const { formatMoney: formatCurrency } = useAppPreferences();
 
   // 切換成員時重置店家篩選與結算區間
   useEffect(() => {
@@ -91,11 +100,13 @@ export default function StatsPage() {
     { enabled: viewMode === "settlement" && !!selectedPeriod && !!selectedWorkerId }
   );
 
-  const dateRangeStartDate = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : "";
+  const dateRangeStartDate = dateRange?.from
+    ? dateToYmdInVancouver(dateRange.from)
+    : "";
   const dateRangeEndDate = dateRange?.to
-    ? format(dateRange.to, "yyyy-MM-dd")
+    ? dateToYmdInVancouver(dateRange.to)
     : dateRange?.from
-      ? format(dateRange.from, "yyyy-MM-dd")
+      ? dateToYmdInVancouver(dateRange.from)
       : "";
 
   const { data: dateRangeStats } = trpc.stats.byDateRange.useQuery(
@@ -113,14 +124,6 @@ export default function StatsPage() {
     : viewMode === "settlement"
       ? settlementStats
       : dateRangeStats;
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("zh-TW", {
-      style: "currency",
-      currency: "TWD",
-      minimumFractionDigits: 0,
-    }).format(value);
-  };
 
   const formatHours = (value: number) => {
     return value.toFixed(2);
@@ -145,30 +148,42 @@ export default function StatsPage() {
 
   const handleExportCSV = () => {
     if (!stats) {
-      toast.error("無數據可匯出");
+      toast.error(t("stats.toastNoData"));
       return;
     }
 
     try {
-      const title = viewMode === "monthly"
-        ? `月份統計報表\n${selectedYear}年${selectedMonth}月`
-        : viewMode === "settlement"
-          ? `結算區間統計報表\n${selectedPeriod?.label ?? ""} (${selectedPeriod?.startDate ?? ""} ~ ${selectedPeriod?.endDate ?? ""})`
-          : `日期區間統計報表\n${dateRangeStartDate} ~ ${dateRangeEndDate}`;
+      const monthlyPeriod =
+        i18n.language === "en"
+          ? `${selectedYear}-${selectedMonth.padStart(2, "0")}`
+          : `${selectedYear}年${selectedMonth}月`;
+      const title =
+        viewMode === "monthly"
+          ? t("stats.csvMonthlyTitle", { period: monthlyPeriod })
+          : viewMode === "settlement"
+            ? t("stats.csvSettlementTitle", {
+                label: selectedPeriod?.label ?? "",
+                start: selectedPeriod?.startDate ?? "",
+                end: selectedPeriod?.endDate ?? "",
+              })
+            : t("stats.csvRangeTitle", {
+                start: dateRangeStartDate,
+                end: dateRangeEndDate,
+              });
       let csv = title + "\n\n";
-      csv += "總計\n";
-      csv += `總工時,${formatHours(stats.totalHours)}\n`;
-      csv += `總收入,${formatCurrency(stats.totalEarnings)}\n`;
-      csv += `總小費,${formatCurrency(stats.totalTips)}\n`;
-      csv += `現金小費,${formatCurrency((stats as any).totalCashTips ?? 0)}\n`;
-      csv += `刷卡小費,${formatCurrency((stats as any).totalCardTips ?? 0)}\n`;
+      csv += `${t("stats.csvTotals")}\n`;
+      csv += `${t("stats.csvTotalHours")},${formatHours(stats.totalHours)}\n`;
+      csv += `${t("stats.csvTotalEarnings")},${formatCurrency(stats.totalEarnings)}\n`;
+      csv += `${t("stats.csvTotalTips")},${formatCurrency(stats.totalTips)}\n`;
+      csv += `${t("stats.csvCashTips")},${formatCurrency((stats as any).totalCashTips ?? 0)}\n`;
+      csv += `${t("stats.csvCardTips")},${formatCurrency((stats as any).totalCardTips ?? 0)}\n`;
       if ((stats as any).totalShopCommission > 0) {
-        csv += `總抽成,${formatCurrency((stats as any).totalShopCommission)}\n`;
+        csv += `${t("stats.csvTotalCommission")},${formatCurrency((stats as any).totalShopCommission)}\n`;
       }
       csv += "\n";
 
-      csv += "按店家統計\n";
-      csv += "店家名稱,工時,收入,現金小費,刷卡小費,總小費,抽成\n";
+      csv += `${t("stats.csvByShop")}\n`;
+      csv += `${t("stats.csvHeaderRow")}\n`;
       Object.entries(stats.byShop).forEach(([, data]) => {
         const shopCommission = (data as any).shopCommission ?? 0;
         const cashTips = (data as any).cashTips ?? 0;
@@ -189,36 +204,36 @@ export default function StatsPage() {
             : `stats-range-${dateRangeStartDate}-${dateRangeEndDate}.csv`
       );
       link.click();
-      toast.success("報表已匯出");
-    } catch (error) {
-      toast.error("匯出失敗");
+      toast.success(t("stats.toastExported"));
+    } catch {
+      toast.error(t("stats.toastExportFail"));
     }
   };
 
-  const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
+  const years = Array.from({ length: 5 }, (_, i) => vanNow.year - i);
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
   return (
     <div className="space-y-6">
       {/* 標題 */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-foreground">統計報表</h1>
+        <h1 className="text-3xl font-bold text-foreground">{t("stats.title")}</h1>
         <Button
           onClick={handleExportCSV}
           variant="outline"
           className="flex items-center gap-2"
         >
           <Download className="w-4 h-4" />
-          匯出 CSV
+          {t("stats.exportCsv")}
         </Button>
       </div>
 
       {/* 檢視模式切換 */}
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "monthly" | "settlement" | "dateRange")}>
         <TabsList>
-          <TabsTrigger value="monthly">依月份</TabsTrigger>
-          <TabsTrigger value="settlement">依結算區間</TabsTrigger>
-          <TabsTrigger value="dateRange">依日期區間</TabsTrigger>
+          <TabsTrigger value="monthly">{t("stats.tabMonthly")}</TabsTrigger>
+          <TabsTrigger value="settlement">{t("stats.tabSettlement")}</TabsTrigger>
+          <TabsTrigger value="dateRange">{t("stats.tabDateRange")}</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -227,7 +242,7 @@ export default function StatsPage() {
         <div className="flex gap-4 items-end flex-wrap">
           {viewMode !== "dateRange" && (
             <div className="form-group">
-              <label className="form-label">年份</label>
+              <label className="form-label">{t("stats.year")}</label>
               <Select value={selectedYear} onValueChange={setSelectedYear}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
@@ -245,7 +260,7 @@ export default function StatsPage() {
 
           {viewMode === "monthly" && (
             <div className="form-group">
-              <label className="form-label">月份</label>
+              <label className="form-label">{t("stats.month")}</label>
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
@@ -253,7 +268,7 @@ export default function StatsPage() {
                 <SelectContent>
                   {months.map((month) => (
                     <SelectItem key={month} value={month.toString()}>
-                      {month}月
+                      {t("stats.monthSuffix", { n: month })}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -263,7 +278,7 @@ export default function StatsPage() {
 
           {viewMode === "dateRange" && (
             <div className="form-group">
-              <label className="form-label">日期範圍</label>
+              <label className="form-label">{t("stats.dateRange")}</label>
               <div className="flex gap-2 items-center">
                 <Popover>
                   <PopoverTrigger asChild>
@@ -275,12 +290,12 @@ export default function StatsPage() {
                       <span className="truncate">
                         {dateRange?.from ? (
                           dateRange.to && dateRange.from.getTime() !== dateRange.to.getTime() ? (
-                            `${format(dateRange.from, "yyyy/MM/dd")} - ${format(dateRange.to, "yyyy/MM/dd")}`
+                            `${formatPickerDateSlash(dateRange.from)} - ${formatPickerDateSlash(dateRange.to)}`
                           ) : (
-                            format(dateRange.from, "yyyy/MM/dd")
+                            formatPickerDateSlash(dateRange.from)
                           )
                         ) : (
-                          "選擇日期範圍"
+                          t("stats.pickDateRange")
                         )}
                       </span>
                     </Button>
@@ -293,29 +308,23 @@ export default function StatsPage() {
                       onSelect={setDateRange}
                       defaultMonth={dateRange?.from ?? new Date()}
                       numberOfMonths={isMobile ? 1 : 2}
-                      startMonth={new Date(now.getFullYear() - 4, 0)}
-                      endMonth={new Date(now.getFullYear() + 1, 11)}
+                      startMonth={new Date(vanNow.year - 4, 0)}
+                      endMonth={new Date(vanNow.year + 1, 11)}
+                      locale={dateFnsLocaleForLng(i18n.language)}
                     />
                     <div className="px-3 pb-3 pt-1 text-center text-sm text-muted-foreground">
                       {!dateRange?.from || (dateRange.from && dateRange.to)
-                        ? "點選日期作為起始日"
-                        : (
-                          <>
-                            起始：<span className="font-medium text-foreground">{format(dateRange.from, "yyyy/MM/dd")}</span>
-                            {" "}— 請選擇結束日
-                          </>
-                        )
-                      }
+                        ? t("stats.rangeHintStart")
+                        : t("stats.rangeHintEnd", {
+                            date: formatPickerDateSlash(dateRange.from),
+                          })}
                     </div>
                   </PopoverContent>
                 </Popover>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setDateRange({
-                    from: new Date(now.getFullYear(), now.getMonth(), 1),
-                    to: new Date(now.getFullYear(), now.getMonth() + 1, 0),
-                  })}
+                  onClick={() => setDateRange(vancouverCurrentMonthPickerRange())}
                 >
                   重置
                 </Button>
@@ -324,7 +333,7 @@ export default function StatsPage() {
           )}
 
           <div className="form-group">
-            <label className="form-label">店家</label>
+            <label className="form-label">{t("stats.shops")}</label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -335,11 +344,11 @@ export default function StatsPage() {
                   <span className="truncate">
                     {selectedShopIds.length === 0
                       ? viewMode === "settlement"
-                        ? "選擇有結算設定的店家"
-                        : "全部店家"
+                        ? t("stats.shopsSettlementOnly")
+                        : t("stats.allShops")
                       : selectedShopIds.length === 1
-                        ? shopListForFilter.find((s: any) => s.id === selectedShopIds[0])?.name ?? "已選 1 家"
-                        : `已選 ${selectedShopIds.length} 家`}
+                        ? shopListForFilter.find((s: any) => s.id === selectedShopIds[0])?.name ?? t("stats.selectedOne")
+                        : t("stats.selectedN", { n: selectedShopIds.length })}
                   </span>
                   <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -385,7 +394,7 @@ export default function StatsPage() {
 
           {viewMode === "settlement" && (
             <div className="form-group">
-              <label className="form-label">結算區間</label>
+              <label className="form-label">{t("stats.settlementPeriod")}</label>
               <Select
                 value={selectedPeriod ? `${selectedPeriod.startDate}_${selectedPeriod.endDate}` : ""}
                 onValueChange={(v) => {
@@ -400,8 +409,8 @@ export default function StatsPage() {
                   <SelectValue
                     placeholder={
                       selectedShopIds.length === 0
-                        ? "請先選擇店家"
-                        : "選擇結算區間"
+                        ? t("stats.pickShopFirst")
+                        : t("stats.pickPeriod")
                     }
                   />
                 </SelectTrigger>
@@ -424,8 +433,8 @@ export default function StatsPage() {
         {viewMode === "settlement" && selectedWorkerId && (shopsWithSettlement.length === 0 || selectedShopIds.length === 0) && (
           <p className="text-sm text-muted-foreground mt-2">
             {shopsWithSettlement.length === 0
-              ? "尚無店家設定結算日，請至店家管理設定結算方式。"
-              : "請選擇至少一家店家以查看結算區間。"}
+              ? t("stats.hintNoSettlement")
+              : t("stats.hintPickShop")}
           </p>
         )}
       </Card>
@@ -435,49 +444,54 @@ export default function StatsPage() {
         <>
           <div className="grid-auto-fit">
             <div className="stat-card">
-              <div className="stat-label">總工時</div>
+              <div className="stat-label">{t("stats.statTotalHours")}</div>
               <div className="stat-value">{formatHours(stats.totalHours)}</div>
-              <div className="text-xs text-muted-foreground">小時</div>
+              <div className="text-xs text-muted-foreground">{t("stats.hoursUnit")}</div>
             </div>
 
             <div className="stat-card">
-              <div className="stat-label">總收入</div>
+              <div className="stat-label">{t("stats.statTotalEarnings")}</div>
               <div className="stat-value">
                 {formatCurrency(stats.totalEarnings)}
               </div>
-              <div className="text-xs text-muted-foreground">含小費</div>
+              <div className="text-xs text-muted-foreground">{t("stats.includesTips")}</div>
             </div>
 
             <div className="stat-card">
-              <div className="stat-label">總小費</div>
+              <div className="stat-label">{t("stats.statTotalTips")}</div>
               <div className="stat-value">
                 {formatCurrency(stats.totalTips)}
               </div>
               <div className="text-xs text-muted-foreground">
-                現金 {formatCurrency((stats as any).totalCashTips ?? 0)} / 刷卡 {formatCurrency((stats as any).totalCardTips ?? 0)}
+                {t("stats.tipsBreakdown", {
+                  cash: formatCurrency((stats as any).totalCashTips ?? 0),
+                  card: formatCurrency((stats as any).totalCardTips ?? 0),
+                })}
               </div>
             </div>
 
             {(stats as any).totalShopCommission > 0 && (
               <div className="stat-card">
-                <div className="stat-label">總抽成</div>
+                <div className="stat-label">{t("stats.statTotalCommission")}</div>
                 <div className="stat-value">
                   {formatCurrency((stats as any).totalShopCommission)}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {viewMode === "monthly" ? "本月應繳" : "本區間應繳"}
+                  {viewMode === "monthly"
+                    ? t("stats.commissionHintMonthly")
+                    : t("stats.commissionHintPeriod")}
                 </div>
               </div>
             )}
 
             <div className="stat-card">
-              <div className="stat-label">平均時薪</div>
+              <div className="stat-label">{t("stats.statAvgHourly")}</div>
               <div className="stat-value">
                 {stats.totalHours > 0
                   ? formatCurrency(stats.totalEarnings / stats.totalHours)
                   : "-"}
               </div>
-              <div className="text-xs text-muted-foreground">含小費</div>
+              <div className="text-xs text-muted-foreground">{t("stats.includesTips")}</div>
             </div>
           </div>
 
@@ -487,7 +501,7 @@ export default function StatsPage() {
               {/* 收入柱狀圖 */}
               <Card className="p-6">
                 <h2 className="text-xl font-semibold text-foreground mb-4">
-                  按店家收入分布
+                  {t("stats.chartEarningsByShop")}
                 </h2>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={chartData}>
@@ -510,7 +524,7 @@ export default function StatsPage() {
               {/* 工時圓餅圖 */}
               <Card className="p-6">
                 <h2 className="text-xl font-semibold text-foreground mb-4">
-                  按店家工時分布
+                  {t("stats.chartHoursByShop")}
                 </h2>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
@@ -528,7 +542,9 @@ export default function StatsPage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value) => `${formatHours(value as number)} 小時`}
+                      formatter={(value) =>
+                        t("stats.hoursTooltip", { n: formatHours(value as number) })
+                      }
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -537,32 +553,32 @@ export default function StatsPage() {
               {/* 詳細統計表 */}
               <Card className="p-6">
                 <h2 className="text-xl font-semibold text-foreground mb-4">
-                  按店家詳細統計
+                  {t("stats.detailByShop")}
                 </h2>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border">
                         <th className="text-left px-4 py-3 font-semibold text-foreground">
-                          店家名稱
+                          {t("stats.thShop")}
                         </th>
                         <th className="text-right px-4 py-3 font-semibold text-foreground">
-                          工時
+                          {t("stats.thHours")}
                         </th>
                         <th className="text-right px-4 py-3 font-semibold text-foreground">
-                          收入
+                          {t("stats.thEarnings")}
                         </th>
                         <th className="text-right px-4 py-3 font-semibold text-foreground">
-                          現金小費
+                          {t("stats.thCashTips")}
                         </th>
                         <th className="text-right px-4 py-3 font-semibold text-foreground">
-                          刷卡小費
+                          {t("stats.thCardTips")}
                         </th>
                         <th className="text-right px-4 py-3 font-semibold text-foreground">
-                          抽成
+                          {t("stats.thCommission")}
                         </th>
                         <th className="text-right px-4 py-3 font-semibold text-foreground">
-                          平均時薪 (含小費)
+                          {t("stats.thAvgHourly")}
                         </th>
                       </tr>
                     </thead>

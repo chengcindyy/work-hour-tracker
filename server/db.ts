@@ -10,6 +10,7 @@ import {
   workRecordLineItems,
   notificationSettings,
   pushSubscriptions,
+  userPreferences,
   workers,
   type Shop,
   type ServiceType,
@@ -18,6 +19,14 @@ import {
   type NotificationSetting,
   type Worker,
 } from "../drizzle/schema";
+import {
+  DEFAULT_USER_PREFERENCE_CURRENCY,
+  DEFAULT_USER_PREFERENCE_UI_LOCALE,
+  USER_PREFERENCE_CURRENCIES,
+  USER_PREFERENCE_UI_LOCALES,
+  type UserPreferenceCurrency,
+  type UserPreferenceUiLocale,
+} from "@shared/const";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -919,6 +928,94 @@ export async function getNotificationSettings(userId: number): Promise<Notificat
     .limit(1);
   
   return result.length > 0 ? result[0] : undefined;
+}
+
+function parseStoredUiLocale(raw: string): UserPreferenceUiLocale {
+  return (USER_PREFERENCE_UI_LOCALES as readonly string[]).includes(raw)
+    ? (raw as UserPreferenceUiLocale)
+    : DEFAULT_USER_PREFERENCE_UI_LOCALE;
+}
+
+function parseStoredCurrency(raw: string): UserPreferenceCurrency {
+  return (USER_PREFERENCE_CURRENCIES as readonly string[]).includes(raw)
+    ? (raw as UserPreferenceCurrency)
+    : DEFAULT_USER_PREFERENCE_CURRENCY;
+}
+
+export type ResolvedUserPreferences = {
+  uiLocale: UserPreferenceUiLocale;
+  currencyCode: UserPreferenceCurrency;
+};
+
+export async function getUserPreferencesForUser(
+  userId: number
+): Promise<ResolvedUserPreferences> {
+  const db = await getDb();
+  if (!db) {
+    return {
+      uiLocale: DEFAULT_USER_PREFERENCE_UI_LOCALE,
+      currencyCode: DEFAULT_USER_PREFERENCE_CURRENCY,
+    };
+  }
+
+  const result = await db
+    .select()
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, userId))
+    .limit(1);
+
+  if (!result[0]) {
+    return {
+      uiLocale: DEFAULT_USER_PREFERENCE_UI_LOCALE,
+      currencyCode: DEFAULT_USER_PREFERENCE_CURRENCY,
+    };
+  }
+
+  return {
+    uiLocale: parseStoredUiLocale(result[0].uiLocale),
+    currencyCode: parseStoredCurrency(result[0].currencyCode),
+  };
+}
+
+export async function updateUserPreferences(
+  userId: number,
+  patch: { uiLocale?: UserPreferenceUiLocale; currencyCode?: UserPreferenceCurrency }
+): Promise<ResolvedUserPreferences> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const current = await getUserPreferencesForUser(userId);
+  const next: ResolvedUserPreferences = {
+    uiLocale: patch.uiLocale ?? current.uiLocale,
+    currencyCode: patch.currencyCode ?? current.currencyCode,
+  };
+
+  const existing = await db
+    .select()
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, userId))
+    .limit(1);
+
+  if (existing[0]) {
+    await db
+      .update(userPreferences)
+      .set({
+        uiLocale: next.uiLocale,
+        currencyCode: next.currencyCode,
+        updatedAt: new Date(),
+      })
+      .where(eq(userPreferences.userId, userId));
+  } else {
+    await db.insert(userPreferences).values({
+      userId,
+      uiLocale: next.uiLocale,
+      currencyCode: next.currencyCode,
+    });
+  }
+
+  return next;
 }
 
 export async function upsertNotificationSettings(
