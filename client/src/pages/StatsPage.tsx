@@ -174,6 +174,7 @@ export default function StatsPage() {
       csv += `${t("stats.csvTotals")}\n`;
       csv += `${t("stats.csvTotalHours")},${formatHours(stats.totalHours)}\n`;
       csv += `${t("stats.csvTotalEarnings")},${formatCurrency(stats.totalEarnings)}\n`;
+      csv += `${t("stats.csvTotalEarningsExclTips")},${formatCurrency(stats.totalEarnings - stats.totalTips)}\n`;
       csv += `${t("stats.csvTotalTips")},${formatCurrency(stats.totalTips)}\n`;
       csv += `${t("stats.csvCashTips")},${formatCurrency((stats as any).totalCashTips ?? 0)}\n`;
       csv += `${t("stats.csvCardTips")},${formatCurrency((stats as any).totalCardTips ?? 0)}\n`;
@@ -455,6 +456,14 @@ export default function StatsPage() {
                 {formatCurrency(stats.totalEarnings)}
               </div>
               <div className="text-xs text-muted-foreground">{t("stats.includesTips")}</div>
+            </div>
+
+            <div className="stat-card">
+              <div className="stat-label">{t("stats.statTotalEarningsExclTips")}</div>
+              <div className="stat-value">
+                {formatCurrency(stats.totalEarnings - stats.totalTips)}
+              </div>
+              <div className="text-xs text-muted-foreground">{t("stats.excludesTips")}</div>
             </div>
 
             <div className="stat-card">
