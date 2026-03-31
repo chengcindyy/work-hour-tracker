@@ -19,7 +19,9 @@ import { Edit2, Trash2, Plus, Store, DollarSign } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-export default function ShopsPage() {
+export type ShopsManagerVariant = "page" | "embedded";
+
+export function ShopsManager({ variant = "page" }: { variant?: ShopsManagerVariant }) {
   const { t, i18n } = useTranslation();
   const { formatMoney: formatCurrency } = useAppPreferences();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -319,14 +321,22 @@ export default function ShopsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className={variant === "embedded" ? "space-y-4" : "space-y-6"}>
       {/* 標題和按鈕 */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-foreground">{t("shops.title")}</h1>
+      <div
+        className={
+          variant === "page"
+            ? "flex items-center justify-between gap-3"
+            : "flex items-center justify-end"
+        }
+      >
+        {variant === "page" && (
+          <h1 className="text-3xl font-bold text-foreground">{t("shops.title")}</h1>
+        )}
         <Button
           onClick={() => handleOpenDialog()}
           disabled={selectedWorkerId == null}
-          className="bg-primary text-primary-foreground hover:bg-primary/90"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
         >
           <Plus className="w-4 h-4 mr-2" />
           {t("shops.addShop")}
@@ -713,4 +723,8 @@ export default function ShopsPage() {
       </Dialog>
     </div>
   );
+}
+
+export default function ShopsPage() {
+  return <ShopsManager variant="page" />;
 }

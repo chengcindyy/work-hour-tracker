@@ -1,4 +1,4 @@
-# 按摩工時登記系統 - AWS Amplify Gen2 部署指南
+# 工時登記系統 - AWS Amplify Gen2 部署指南
 
 ## 目錄
 

@@ -86,8 +86,8 @@
     "shop": "店家",
     "selectMemberFirst": "請先在右上角選擇成員",
     "selectShopPlaceholder": "選擇店家",
-    "noShopsPrefix": "尚無店家，請先至 ",
-    "noShopsSuffix": " 頁面新增店家",
+    "noShopsPrefix": "尚無店家，請至",
+    "noShopsSuffix": "「設定」新增店家。",
     "noServiceTypesWarning": "所選店家尚無服務類型，無法新增工時",
     "serviceType": "服務類型",
     "selectServiceTypePlaceholder": "選擇服務類型",
@@ -103,7 +103,14 @@
     "tipsOptional": "小費（選填）",
     "cashTips": "現金小費",
     "cardTips": "刷卡小費",
-    "save": "儲存"
+    "save": "儲存",
+    "overviewHint": "總覽目前成員的收入趨勢與本月摘要。",
+    "chartYearEarnings": "年度每月收入",
+    "chartEmpty": "這段期間尚無收入資料。",
+    "monthSummaryTitle": "本月摘要",
+    "noMonthData": "無法載入本月統計。",
+    "linkFullStats": "完整統計",
+    "addWorkAria": "新增工時紀錄"
   },
   "settings": {
     "title": "設定",
@@ -167,6 +174,14 @@
     "toastWorkerAdded": "已新增成員",
     "toastWorkerAddFail": "新增成員失敗，請重試",
     "toastSubscribeOk": "訂閱成功",
+    "workersCollapsibleHint": "建立與選擇登記工時使用的成員。",
+    "languageCollapsibleHint": "介面語言與金額顯示幣別。",
+    "pushCollapsibleHint": "每日提醒與推播訂閱。",
+    "exportCollapsibleHint": "將工時匯出為 CSV 備份。",
+    "aboutCollapsibleHint": "應用程式說明與版本資訊。",
+    "installCollapsibleHint": "加入主畫面以便快速開啟。",
+    "shopsSectionTitle": "店家管理",
+    "shopsSectionHint": "新增或編輯工作地點、計薪方式與費率（通常只需設定一次）。",
     "exportTitle": "數據匯出",
     "exportHeading": "匯出所有工時紀錄",
     "exportDesc": "將所有工時紀錄匯出為 CSV 檔案，用於備份或進一步分析",
@@ -322,7 +337,9 @@
     "cashTips": "現金小費",
     "cardTips": "刷卡小費",
     "notes": "備註",
-    "notesPlaceholder": "例如：特殊情況、額外說明"
+    "notesPlaceholder": "例如：特殊情況、額外說明",
+    "noShopsHint": "尚未建立任何店家，請先到設定中的「店家管理」新增店家後，再登記工時。",
+    "goToShopSettings": "前往設定 — 店家管理"
   },
   "stats": {
     "title": "統計報表",

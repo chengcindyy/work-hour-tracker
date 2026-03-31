@@ -24,7 +24,7 @@ import { Edit2, Trash2, Plus, Clock, Minus, ChevronDown, CalendarIcon } from "lu
 import { dateFnsLocaleForLng } from "@/i18n/dateLocale";
 import { useAppPreferences } from "@/contexts/AppPreferencesContext";
 import { useTranslation } from "react-i18next";
-import { useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import {
   dateToYmdInVancouver,
   formatPickerDateSlash,
@@ -91,14 +91,18 @@ export default function WorkRecordsPage() {
 
   const { selectedWorkerId } = useWorkerSelection();
   const [, navigate] = useLocation();
+  const search = useSearch();
   const isMobile = useIsMobile();
   const { t, i18n } = useTranslation();
   const { formatMoney: formatCurrency } = useAppPreferences();
 
-  const { data: shops } = trpc.shops.list.useQuery(
+  const { data: shops, isLoading: shopsLoading } = trpc.shops.list.useQuery(
     { workerId: selectedWorkerId! },
     { enabled: selectedWorkerId != null }
   );
+
+  const noShopsForWorker =
+    selectedWorkerId != null && !shopsLoading && shops !== undefined && shops.length === 0;
   const { data: workRecords, isLoading } = trpc.workRecords.list.useQuery(
     {
       workerId: selectedWorkerId ?? undefined,
@@ -214,6 +218,14 @@ export default function WorkRecordsPage() {
   };
 
   useEffect(() => {
+    const params = new URLSearchParams(search);
+    if (params.get("new") !== "1") return;
+    handleOpenDialog();
+    navigate("/records", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once per ?new=1; handleOpenDialog is stable enough for this flow
+  }, [search, navigate]);
+
+  useEffect(() => {
     if (serviceTypes?.length === 1) {
       setSelectedServiceTypeId(serviceTypes[0].id.toString());
       setLineItems((prev) =>
@@ -312,7 +324,8 @@ export default function WorkRecordsPage() {
         toast.success(t("records.toastCreated"));
       }
       utils.workRecords.list.invalidate();
-      utils.stats.monthlyStats.invalidate();
+      void utils.stats.monthlyStats.invalidate();
+      void utils.stats.yearMonthly.invalidate();
       handleCloseDialog();
     } catch {
       toast.error(t("records.toastFail"));
@@ -325,7 +338,8 @@ export default function WorkRecordsPage() {
         await deleteRecordMutation.mutateAsync({ recordId });
         toast.success(t("records.toastDeleted"));
         utils.workRecords.list.invalidate();
-        utils.stats.monthlyStats.invalidate();
+        void utils.stats.monthlyStats.invalidate();
+        void utils.stats.yearMonthly.invalidate();
       } catch {
         toast.error(t("records.toastDeleteFail"));
       }
@@ -431,19 +445,21 @@ export default function WorkRecordsPage() {
       {/* 標題和按鈕 */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl md:text-3xl font-bold text-foreground truncate">
-          工時登記
+          {t("records.title")}
         </h1>
         <Button
-          onClick={() => navigate("/dashboard")}
+          type="button"
+          onClick={() => handleOpenDialog()}
           className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
+          aria-label={t("records.addFromDashboard")}
         >
           <Plus className="w-4 h-4 md:mr-2" />
-          <span className="hidden md:inline">新增工時</span>
+          <span className="hidden md:inline">{t("records.addFromDashboard")}</span>
         </Button>
       </div>
 
-      {/* 篩選區：toggle 收合，預設打開（手機、電腦版一致） */}
-      <Collapsible defaultOpen className="group">
+      {/* 篩選區：預設收合，清單優先 */}
+      <Collapsible defaultOpen={false} className="group">
         <Card className="p-3">
           <CollapsibleTrigger asChild>
             <button className="flex items-center justify-between w-full text-left py-0.5 -mt-0.5">
@@ -573,7 +589,7 @@ export default function WorkRecordsPage() {
                 workRecords && workRecords.length > 0
                   ? (setFilterShopId(""),
                     setDateRange(vancouverCurrentMonthPickerRange()))
-                  : navigate("/dashboard")
+                  : handleOpenDialog()
               }
               className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
             >
@@ -597,7 +613,19 @@ export default function WorkRecordsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          {noShopsForWorker && (
+            <div
+              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-50"
+              role="status"
+            >
+              <p className="mb-2">{t("records.noShopsHint")}</p>
+              <Button variant="outline" size="sm" className="border-amber-300 bg-background" asChild>
+                <Link href="/settings#shops">{t("records.goToShopSettings")}</Link>
+              </Button>
+            </div>
+          )}
+
+          <div className={`space-y-4 ${noShopsForWorker ? "opacity-50 pointer-events-none" : ""}`}>
             <div className="form-group">
               <label className="form-label">{t("records.shopRequired")}</label>
               <Select
@@ -838,6 +866,7 @@ export default function WorkRecordsPage() {
               <Button
                 onClick={handleSubmit}
                 disabled={
+                  noShopsForWorker ||
                   createRecordMutation.isPending ||
                   updateRecordMutation.isPending ||
                   hasNoServiceTypes ||

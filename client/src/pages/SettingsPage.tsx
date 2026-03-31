@@ -13,7 +13,19 @@ import { useUpdateAvailable } from "@/hooks/useUpdateAvailable";
 import { formatWorkDateSlash } from "@/lib/vancouverTime";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
-import { Bell, ChevronDown, Download, RefreshCw, Save, UserPlus } from "lucide-react";
+import {
+  Bell,
+  ChevronDown,
+  Download,
+  Globe,
+  Info,
+  RefreshCw,
+  Save,
+  Smartphone,
+  Store,
+  UserPlus,
+} from "lucide-react";
+import { ShopsManager } from "@/pages/ShopsPage";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -83,6 +95,20 @@ export default function SettingsPage() {
   const [newWorkerName, setNewWorkerName] = useState("");
   const [editingWorkerId, setEditingWorkerId] = useState<number | null>(null);
   const [editingWorkerName, setEditingWorkerName] = useState("");
+  const [shopsSectionOpen, setShopsSectionOpen] = useState(
+    () => typeof window !== "undefined" && window.location.hash === "#shops"
+  );
+
+  useEffect(() => {
+    const syncShopsHash = () => {
+      if (window.location.hash === "#shops") {
+        setShopsSectionOpen(true);
+      }
+    };
+    syncShopsHash();
+    window.addEventListener("hashchange", syncShopsHash);
+    return () => window.removeEventListener("hashchange", syncShopsHash);
+  }, []);
 
   useEffect(() => {
     if (notificationSettings) {
@@ -268,8 +294,8 @@ export default function SettingsPage() {
           }
         >
           <CollapsibleTrigger asChild>
-            <button type="button" className="flex w-full items-center justify-between px-4 text-left">
-              <div className="flex items-center gap-3">
+            <button type="button" className="flex w-full items-center justify-between px-4 py-4 text-left">
+              <div className="flex items-center gap-3 min-w-0">
                 <RefreshCw className="h-5 w-5 text-primary shrink-0" />
                 <div>
                   <h2 className="font-semibold text-foreground">{t("settings.checkUpdateTitle")}</h2>
@@ -282,7 +308,7 @@ export default function SettingsPage() {
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="border-t px-4 pt-3">
+            <div className="border-t px-4 pt-3 pb-4">
               <p className="text-sm text-muted-foreground mb-3">{t("settings.checkUpdateHelp")}</p>
               <Button
                 variant="outline"
@@ -308,23 +334,29 @@ export default function SettingsPage() {
         </Card>
       </Collapsible>
 
-      <Card className="p-4 sm:p-6 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <UserPlus className="w-6 h-6 text-primary shrink-0" />
-            <h2 className="text-2xl font-semibold text-foreground">{t("settings.workersTitle")}</h2>
-          </div>
-          {workers.length > 0 && selectedWorkerId != null && (
-            <div className="text-sm text-muted-foreground truncate">
-              {t("settings.workersCurrent")}{" "}
-              <span className="font-medium text-foreground">
-                {workers.find((w) => w.id === selectedWorkerId)?.name ?? "-"}
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-4">
+      <Collapsible defaultOpen={false} className="group">
+        <Card>
+          <CollapsibleTrigger asChild>
+            <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left">
+              <div className="flex items-center gap-3 min-w-0">
+                <UserPlus className="h-5 w-5 text-primary shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-foreground">{t("settings.workersTitle")}</h2>
+                  <p className="text-sm text-muted-foreground">{t("settings.workersCollapsibleHint")}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {workers.length > 0 && selectedWorkerId != null && (
+                  <span className="text-xs text-muted-foreground max-w-[140px] truncate hidden sm:inline">
+                    {workers.find((w) => w.id === selectedWorkerId)?.name ?? "-"}
+                  </span>
+                )}
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180 shrink-0" />
+              </div>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t px-4 pt-4 pb-4 space-y-4">
           <div className="space-y-2">
             <div className="font-medium text-foreground">{t("settings.workersListLabel")}</div>
             {workers.length === 0 ? (
@@ -477,76 +509,125 @@ export default function SettingsPage() {
               </Button>
             </div>
           </div>
-        </div>
-      </Card>
+            </div>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
-      <Card className="p-4 sm:p-6 space-y-5">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">{t("settings.languageSection")}</h2>
-          <p className="text-sm text-muted-foreground mt-1">{t("settings.languageHint")}</p>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <Label htmlFor="settings-lang" className="text-sm text-muted-foreground shrink-0">
-            {t("language.label")}
-          </Label>
-          <Select
-            value={
-              userPrefs?.uiLocale ??
-              (i18n.language === "en" ? "en" : "zh-TW")
-            }
-            disabled={userPrefsLoading || updateUserPrefsMutation.isPending}
-            onValueChange={(v) => {
-              void updateUserPrefsMutation.mutateAsync({
-                uiLocale: v as AppLocale,
-              });
-            }}
-          >
-            <SelectTrigger id="settings-lang" className="w-full sm:w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SUPPORTED_LOCALES.map((code) => (
-                <SelectItem key={code} value={code}>
-                  {code === "zh-TW" ? t("language.zhTW") : t("language.en")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1 border-t border-border/60">
-          <Label htmlFor="settings-currency" className="text-sm text-muted-foreground shrink-0">
-            {t("settings.currencyLabel")}
-          </Label>
-          <Select
-            value={userPrefs?.currencyCode ?? displayCurrencyCode}
-            disabled={userPrefsLoading || updateUserPrefsMutation.isPending}
-            onValueChange={(v) => {
-              void updateUserPrefsMutation.mutateAsync({
-                currencyCode: v as (typeof SUPPORTED_DISPLAY_CURRENCIES)[number],
-              });
-            }}
-          >
-            <SelectTrigger id="settings-currency" className="w-full sm:w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SUPPORTED_DISPLAY_CURRENCIES.map((code) => (
-                <SelectItem key={code} value={code}>
-                  {t(`settings.currency.${code}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <p className="text-xs text-muted-foreground">{t("settings.currencyHint")}</p>
-      </Card>
+      <Collapsible open={shopsSectionOpen} onOpenChange={setShopsSectionOpen} className="group">
+        <Card>
+          <CollapsibleTrigger asChild>
+            <button type="button" className="flex w-full items-center justify-between px-4 py-4 text-left">
+              <div className="flex items-center gap-3 min-w-0">
+                <Store className="h-5 w-5 text-primary shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-foreground">{t("settings.shopsSectionTitle")}</h2>
+                  <p className="text-sm text-muted-foreground">{t("settings.shopsSectionHint")}</p>
+                </div>
+              </div>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180 shrink-0" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t px-4 pt-4 pb-4">
+              <ShopsManager variant="embedded" />
+            </div>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
-      <Card className="p-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <Bell className="w-6 h-6 text-primary" />
-          <h2 className="text-2xl font-semibold text-foreground">{t("settings.pushTitle")}</h2>
-        </div>
+      <Collapsible defaultOpen={false} className="group">
+        <Card>
+          <CollapsibleTrigger asChild>
+            <button type="button" className="flex w-full items-center justify-between px-4 py-4 text-left">
+              <div className="flex items-center gap-3 min-w-0">
+                <Globe className="h-5 w-5 text-primary shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-foreground">{t("settings.languageSection")}</h2>
+                  <p className="text-sm text-muted-foreground">{t("settings.languageCollapsibleHint")}</p>
+                </div>
+              </div>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180 shrink-0" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t px-4 pt-4 pb-4 space-y-5">
+              <p className="text-sm text-muted-foreground">{t("settings.languageHint")}</p>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <Label htmlFor="settings-lang" className="text-sm text-muted-foreground shrink-0">
+                  {t("language.label")}
+                </Label>
+                <Select
+                  value={
+                    userPrefs?.uiLocale ??
+                    (i18n.language === "en" ? "en" : "zh-TW")
+                  }
+                  disabled={userPrefsLoading || updateUserPrefsMutation.isPending}
+                  onValueChange={(v) => {
+                    void updateUserPrefsMutation.mutateAsync({
+                      uiLocale: v as AppLocale,
+                    });
+                  }}
+                >
+                  <SelectTrigger id="settings-lang" className="w-full sm:w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUPPORTED_LOCALES.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {code === "zh-TW" ? t("language.zhTW") : t("language.en")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1 border-t border-border/60">
+                <Label htmlFor="settings-currency" className="text-sm text-muted-foreground shrink-0">
+                  {t("settings.currencyLabel")}
+                </Label>
+                <Select
+                  value={userPrefs?.currencyCode ?? displayCurrencyCode}
+                  disabled={userPrefsLoading || updateUserPrefsMutation.isPending}
+                  onValueChange={(v) => {
+                    void updateUserPrefsMutation.mutateAsync({
+                      currencyCode: v as (typeof SUPPORTED_DISPLAY_CURRENCIES)[number],
+                    });
+                  }}
+                >
+                  <SelectTrigger id="settings-currency" className="w-full sm:w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUPPORTED_DISPLAY_CURRENCIES.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {t(`settings.currency.${code}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">{t("settings.currencyHint")}</p>
+            </div>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
+      <Collapsible defaultOpen={false} className="group">
+        <Card>
+          <CollapsibleTrigger asChild>
+            <button type="button" className="flex w-full items-center justify-between px-4 py-4 text-left">
+              <div className="flex items-center gap-3 min-w-0">
+                <Bell className="h-5 w-5 text-primary shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-foreground">{t("settings.pushTitle")}</h2>
+                  <p className="text-sm text-muted-foreground">{t("settings.pushCollapsibleHint")}</p>
+                </div>
+              </div>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180 shrink-0" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t px-4 pt-4 pb-4 space-y-6">
         <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
           <div className="font-medium mb-1">{t("settings.pushIosTitle")}</div>
           <p className="text-muted-foreground dark:text-amber-200/90">{t("settings.pushIosBody")}</p>
@@ -619,62 +700,105 @@ export default function SettingsPage() {
             </>
           )}
         </div>
-      </Card>
+            </div>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
-      <Card className="p-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <Download className="w-6 h-6 text-secondary" />
-          <h2 className="text-2xl font-semibold text-foreground">{t("settings.exportTitle")}</h2>
-        </div>
+      <Collapsible defaultOpen={false} className="group">
+        <Card>
+          <CollapsibleTrigger asChild>
+            <button type="button" className="flex w-full items-center justify-between px-4 py-4 text-left">
+              <div className="flex items-center gap-3 min-w-0">
+                <Download className="h-5 w-5 text-primary shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-foreground">{t("settings.exportTitle")}</h2>
+                  <p className="text-sm text-muted-foreground">{t("settings.exportCollapsibleHint")}</p>
+                </div>
+              </div>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180 shrink-0" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t px-4 pt-4 pb-4 space-y-4">
+              <div>
+                <div className="font-medium text-foreground">{t("settings.exportHeading")}</div>
+                <div className="text-sm text-muted-foreground">{t("settings.exportDesc")}</div>
+              </div>
+              <Button onClick={handleExportAllData} variant="outline" className="flex items-center gap-2">
+                <Download className="w-4 h-4" />
+                {t("settings.exportCsv")}
+              </Button>
+            </div>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
-        <div className="space-y-4">
-          <div>
-            <div className="font-medium text-foreground">{t("settings.exportHeading")}</div>
-            <div className="text-sm text-muted-foreground">{t("settings.exportDesc")}</div>
-          </div>
+      <Collapsible defaultOpen={false} className="group">
+        <Card className="bg-muted/30">
+          <CollapsibleTrigger asChild>
+            <button type="button" className="flex w-full items-center justify-between px-4 py-4 text-left">
+              <div className="flex items-center gap-3 min-w-0">
+                <Info className="h-5 w-5 text-primary shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-foreground">{t("settings.aboutTitle")}</h2>
+                  <p className="text-sm text-muted-foreground">{t("settings.aboutCollapsibleHint")}</p>
+                </div>
+              </div>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180 shrink-0" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t px-4 pt-4 pb-4 space-y-2 text-sm text-muted-foreground">
+              <p>
+                <span className="font-medium text-foreground">{t("settings.aboutNameLabel")}</span>
+                {t("settings.aboutName")}
+              </p>
+              <p>
+                <span className="font-medium text-foreground">{t("settings.aboutVersionLabel")}</span>
+                1.0.0
+              </p>
+              <p>
+                <span className="font-medium text-foreground">{t("settings.aboutFeaturesLabel")}</span>
+                {t("settings.aboutFeatures")}
+              </p>
+              <p className="pt-2">{t("settings.aboutPwa")}</p>
+            </div>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
-          <Button onClick={handleExportAllData} variant="outline" className="flex items-center gap-2">
-            <Download className="w-4 h-4" />
-            {t("settings.exportCsv")}
-          </Button>
-        </div>
-      </Card>
-
-      <Card className="p-6 space-y-4 bg-muted/30">
-        <h2 className="text-xl font-semibold text-foreground">{t("settings.aboutTitle")}</h2>
-        <div className="space-y-2 text-sm text-muted-foreground">
-          <p>
-            <span className="font-medium text-foreground">{t("settings.aboutNameLabel")}</span>
-            {t("settings.aboutName")}
-          </p>
-          <p>
-            <span className="font-medium text-foreground">{t("settings.aboutVersionLabel")}</span>
-            1.0.0
-          </p>
-          <p>
-            <span className="font-medium text-foreground">{t("settings.aboutFeaturesLabel")}</span>
-            {t("settings.aboutFeatures")}
-          </p>
-          <p className="pt-2">{t("settings.aboutPwa")}</p>
-        </div>
-      </Card>
-
-      <Card className="p-6 space-y-4 bg-secondary/10 border-secondary/30">
-        <h2 className="text-xl font-semibold text-foreground">{t("settings.installTitle")}</h2>
-        <div className="space-y-2 text-sm text-muted-foreground">
-          <p>{t("settings.installIntro")}</p>
-          <ul className="list-disc list-inside space-y-1 ml-2">
-            <li>
-              <span className="font-medium text-foreground">{t("settings.installIos")}</span>{" "}
-              {t("settings.installIosSteps")}
-            </li>
-            <li>
-              <span className="font-medium text-foreground">{t("settings.installAndroid")}</span>{" "}
-              {t("settings.installAndroidSteps")}
-            </li>
-          </ul>
-        </div>
-      </Card>
+      <Collapsible defaultOpen={false} className="group">
+        <Card className="bg-secondary/10 border-secondary/30">
+          <CollapsibleTrigger asChild>
+            <button type="button" className="flex w-full items-center justify-between px-4 py-4 text-left">
+              <div className="flex items-center gap-3 min-w-0">
+                <Smartphone className="h-5 w-5 text-primary shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-foreground">{t("settings.installTitle")}</h2>
+                  <p className="text-sm text-muted-foreground">{t("settings.installCollapsibleHint")}</p>
+                </div>
+              </div>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180 shrink-0" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t px-4 pt-4 pb-4 space-y-2 text-sm text-muted-foreground">
+              <p>{t("settings.installIntro")}</p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>
+                  <span className="font-medium text-foreground">{t("settings.installIos")}</span>{" "}
+                  {t("settings.installIosSteps")}
+                </li>
+                <li>
+                  <span className="font-medium text-foreground">{t("settings.installAndroid")}</span>{" "}
+                  {t("settings.installAndroidSteps")}
+                </li>
+              </ul>
+            </div>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
     </div>
   );
 }

@@ -901,6 +901,61 @@ export async function getMonthlyStats(
   return aggregateWorkRecordsToStats(userId, records, shopIds);
 }
 
+/** One DB read for the calendar year; buckets by `workDate` month (YYYY-MM-DD). */
+export type YearMonthStat = {
+  month: number;
+  totalEarnings: number;
+  totalHours: number;
+};
+
+export async function getYearMonthlyTotals(
+  userId: number,
+  year: number,
+  workerId?: number,
+  shopIds?: number[]
+): Promise<YearMonthStat[]> {
+  const startYmd = `${year}-01-01`;
+  const endYmd = `${year}-12-31`;
+  const records = (await getUserWorkRecords(
+    userId,
+    workerId,
+    startYmd,
+    endYmd
+  )) as WorkRecordWithLineItems[];
+
+  const shopIdsSet =
+    shopIds != null && shopIds.length > 0 ? new Set(shopIds) : null;
+
+  const buckets: YearMonthStat[] = Array.from({ length: 12 }, (_, i) => ({
+    month: i + 1,
+    totalEarnings: 0,
+    totalHours: 0,
+  }));
+
+  for (const record of records) {
+    if (shopIdsSet != null && !shopIdsSet.has(record.shopId)) continue;
+
+    const workDate = record.workDate as string;
+    const monthPart = parseInt(workDate.slice(5, 7), 10);
+    if (Number.isNaN(monthPart) || monthPart < 1 || monthPart > 12) continue;
+
+    let hours = 0;
+    if (record.lineItems && record.lineItems.length > 0) {
+      hours = record.lineItems.reduce((sum, li) => sum + li.hours, 0);
+    } else if (record.hours != null) {
+      hours = parseFloat(record.hours as any);
+    }
+    const earnings = parseFloat(record.totalEarnings as any);
+    if (Number.isNaN(earnings)) continue;
+
+    const b = buckets[monthPart - 1];
+    b.totalEarnings += earnings;
+    b.totalHours += Number.isNaN(hours) ? 0 : hours;
+  }
+
+  return buckets;
+}
+
 export async function getStatsForDateRange(
   userId: number,
   startDateYmd: string,

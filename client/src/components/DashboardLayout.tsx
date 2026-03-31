@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
 import { useUpdateAvailable } from "@/hooks/useUpdateAvailable";
-import { LayoutDashboard, LogOut, Store, FileText, BarChart3, Settings } from "lucide-react";
+import { LayoutDashboard, LogOut, FileText, BarChart3, Settings } from "lucide-react";
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, Link } from "wouter";
@@ -95,7 +95,6 @@ function DashboardLayoutContent({
   const menuItems = useMemo(
     () => [
       { icon: LayoutDashboard, label: t("nav.home"), path: "/dashboard" },
-      { icon: Store, label: t("nav.shops"), path: "/shops" },
       { icon: FileText, label: t("nav.records"), path: "/records" },
       { icon: BarChart3, label: t("nav.stats"), path: "/stats" },
       { icon: Settings, label: t("nav.settings"), path: "/settings" },

@@ -86,8 +86,8 @@
     "shop": "Shop",
     "selectMemberFirst": "Select a member first (top right).",
     "selectShopPlaceholder": "Select shop",
-    "noShopsPrefix": "No shops yet. Add one under ",
-    "noShopsSuffix": ".",
+    "noShopsPrefix": "No shops yet. Add one in ",
+    "noShopsSuffix": "Settings.",
     "noServiceTypesWarning": "This shop has no service types; you cannot add a record.",
     "serviceType": "Service type",
     "selectServiceTypePlaceholder": "Select service type",
@@ -103,7 +103,14 @@
     "tipsOptional": "Tips (optional)",
     "cashTips": "Cash tips",
     "cardTips": "Card tips",
-    "save": "Save"
+    "save": "Save",
+    "overviewHint": "Overview of this member’s earnings trend and the current month.",
+    "chartYearEarnings": "Earnings by month",
+    "chartEmpty": "No earnings for this period yet.",
+    "monthSummaryTitle": "This month",
+    "noMonthData": "Could not load this month’s stats.",
+    "linkFullStats": "Full statistics",
+    "addWorkAria": "Add work record"
   },
   "settings": {
     "title": "Settings",
@@ -167,6 +174,14 @@
     "toastWorkerAdded": "Member added.",
     "toastWorkerAddFail": "Could not add member. Try again.",
     "toastSubscribeOk": "Subscribed.",
+    "workersCollapsibleHint": "Create and select members for logging hours.",
+    "languageCollapsibleHint": "Interface language and amount display currency.",
+    "pushCollapsibleHint": "Daily reminders and push subscription.",
+    "exportCollapsibleHint": "Export work records to CSV for backup.",
+    "aboutCollapsibleHint": "App description and version.",
+    "installCollapsibleHint": "Add to your home screen for quick access.",
+    "shopsSectionTitle": "Shop management",
+    "shopsSectionHint": "Add or edit workplaces, pay type, and rates (usually a one-time setup).",
     "exportTitle": "Export data",
     "exportHeading": "Export all work records",
     "exportDesc": "Download CSV for backup or analysis.",
@@ -322,7 +337,9 @@
     "cashTips": "Cash tips",
     "cardTips": "Card tips",
     "notes": "Notes",
-    "notesPlaceholder": "e.g. notes or context"
+    "notesPlaceholder": "e.g. notes or context",
+    "noShopsHint": "You have no shops yet. Add a shop under Settings → Shop management before logging hours.",
+    "goToShopSettings": "Open Settings — Shop management"
   },
   "stats": {
     "title": "Statistics",

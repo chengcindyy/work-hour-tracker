@@ -30,6 +30,7 @@ import {
   updateWorkRecord,
   deleteWorkRecord,
   getMonthlyStats,
+  getYearMonthlyTotals,
   getStatsForDateRange,
   getNotificationSettings,
   upsertNotificationSettings,
@@ -556,6 +557,18 @@ export const appRouter = router({
       )
       .query(({ ctx, input }) => {
         return getMonthlyStats(ctx.user.id, input.year, input.month, input.workerId, input.shopIds);
+      }),
+
+    yearMonthly: protectedProcedure
+      .input(
+        z.object({
+          workerId: z.number().optional(),
+          year: z.number(),
+          shopIds: z.array(z.number()).optional(),
+        })
+      )
+      .query(({ ctx, input }) => {
+        return getYearMonthlyTotals(ctx.user.id, input.year, input.workerId, input.shopIds);
       }),
 
     settlementPeriods: protectedProcedure
