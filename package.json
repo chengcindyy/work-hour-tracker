@@ -17,6 +17,7 @@
     "db:migrate-add-line-items": "node scripts/run-add-line-items-migration.mjs",
     "db:migrate-add-settlement": "node scripts/run-add-settlement-migration.mjs",
     "db:migrate-add-push-subscriptions": "node scripts/run-add-push-subscriptions-migration.mjs",
+    "db:migrate-add-default-worker-preference": "node scripts/run-add-default-worker-preference-migration.mjs",
     "generate-vapid": "node scripts/generate-vapid-keys.mjs",
     "generate-icons": "node scripts/generate-icons.mjs"
   },

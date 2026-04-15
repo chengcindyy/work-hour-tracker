@@ -71,6 +71,7 @@ export default function SettingsPage() {
 
   const { data: userPrefs, isLoading: userPrefsLoading } =
     trpc.userPreferences.get.useQuery();
+  const defaultWorkerId = userPrefs?.defaultWorkerId ?? null;
   const updateUserPrefsMutation = trpc.userPreferences.update.useMutation({
     onSuccess: (data) => {
       applyFromServer({
@@ -82,6 +83,15 @@ export default function SettingsPage() {
     },
     onError: () => {
       toast.error(t("settings.toastSaveFailed"));
+    },
+  });
+  const updateDefaultWorkerMutation = trpc.userPreferences.update.useMutation({
+    onSuccess: async () => {
+      await utils.userPreferences.get.invalidate();
+      toast.success(t("settings.toastDefaultWorkerSaved"));
+    },
+    onError: () => {
+      toast.error(t("settings.toastDefaultWorkerSaveFail"));
     },
   });
 
@@ -365,6 +375,7 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 {workers.map((worker) => {
                   const isEditing = editingWorkerId === worker.id;
+                  const isDefaultWorker = defaultWorkerId === worker.id;
                   return (
                     <div
                       key={worker.id}
@@ -421,6 +432,9 @@ export default function SettingsPage() {
                             {selectedWorkerId === worker.id && (
                               <div className="text-xs text-primary mt-1">{t("settings.workerSelectedBadge")}</div>
                             )}
+                            {isDefaultWorker && (
+                              <div className="text-xs text-secondary mt-1">{t("settings.defaultWorkerBadge")}</div>
+                            )}
                           </div>
                           <div className="flex flex-wrap gap-2 shrink-0">
                             <Button
@@ -429,6 +443,20 @@ export default function SettingsPage() {
                               onClick={() => setSelectedWorkerId(worker.id)}
                             >
                               {t("settings.selectThisWorker")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={isDefaultWorker ? "secondary" : "outline"}
+                              disabled={isDefaultWorker || updateDefaultWorkerMutation.isPending}
+                              onClick={() => {
+                                void updateDefaultWorkerMutation.mutateAsync({
+                                  defaultWorkerId: worker.id,
+                                });
+                              }}
+                            >
+                              {isDefaultWorker
+                                ? t("settings.defaultWorkerButton")
+                                : t("settings.setDefaultWorker")}
                             </Button>
                             <Button
                               size="sm"
@@ -457,6 +485,7 @@ export default function SettingsPage() {
                                     setSelectedWorkerId(null);
                                   }
                                   await utils.workers.list.invalidate();
+                                  await utils.userPreferences.get.invalidate();
                                   toast.success(t("settings.toastWorkerRemoved"));
                                 } catch {
                                   toast.error(t("settings.toastWorkerRemoveFail"));

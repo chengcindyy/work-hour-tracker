@@ -181,6 +181,9 @@ export const userPreferences = pgTable("userPreferences", {
     .references(() => users.id, { onDelete: "cascade" }),
   uiLocale: varchar("uiLocale", { length: 16 }).notNull().default("zh-TW"),
   currencyCode: varchar("currencyCode", { length: 8 }).notNull().default("CAD"),
+  defaultWorkerId: integer("defaultWorkerId").references(() => workers.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

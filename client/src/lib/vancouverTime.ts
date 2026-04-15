@@ -31,6 +31,20 @@ function pad2(n: number): string {
   return n.toString().padStart(2, "0");
 }
 
+function parseYmdParts(ymd: string): { year: number; month: number; day: number } {
+  const [year, month, day] = ymd.split("-").map((part) => parseInt(part, 10));
+  return { year, month, day };
+}
+
+function ymdToUtcDate(ymd: string): Date {
+  const { year, month, day } = parseYmdParts(ymd);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function utcDateToYmd(date: Date): string {
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+}
+
 /** 將日期選擇器選到的 `Date` 轉成溫哥華當天的 yyyy-MM-dd（送 API / 存檔）。 */
 export function dateToYmdInVancouver(d: Date): string {
   return formatInTimeZone(d, APP_TIME_ZONE, "yyyy-MM-dd");
@@ -40,6 +54,48 @@ export function dateToYmdInVancouver(d: Date): string {
 export function vancouverTodayYmd(): string {
   const { year, month, day } = getCalendarPartsInZone();
   return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+export function ymdFromYearMonth(year: number, month: number, day: number = 1): string {
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+export function addDaysToYmd(ymd: string, deltaDays: number): string {
+  const date = ymdToUtcDate(ymd);
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  return utcDateToYmd(date);
+}
+
+export function addMonthsToYmd(ymd: string, deltaMonths: number): string {
+  const { year, month } = parseYmdParts(ymd);
+  let targetYear = year;
+  let targetMonth = month + deltaMonths;
+
+  while (targetMonth > 12) {
+    targetMonth -= 12;
+    targetYear += 1;
+  }
+
+  while (targetMonth < 1) {
+    targetMonth += 12;
+    targetYear -= 1;
+  }
+
+  return ymdFromYearMonth(targetYear, targetMonth, 1);
+}
+
+export function monthStartForYmd(ymd: string): string {
+  const { year, month } = parseYmdParts(ymd);
+  return ymdFromYearMonth(year, month, 1);
+}
+
+export function weekRangeForYmd(ymd: string): { startDate: string; endDate: string } {
+  const weekday = ymdToUtcDate(ymd).getUTCDay();
+  const startDate = addDaysToYmd(ymd, -weekday);
+  return {
+    startDate,
+    endDate: addDaysToYmd(startDate, 6),
+  };
 }
 
 /** 儲存的 workDate（yyyy-MM-dd）在溫哥華當日開始的瞬間，供格式化用。 */
@@ -59,6 +115,13 @@ export function formatWorkDateSlash(ymd: string): string {
 export function formatWorkWeekdayLong(ymd: string): string {
   if (!ymd) return "";
   return formatInTimeZone(instantForWorkDateYmd(ymd), APP_TIME_ZONE, "EEEE", {
+    locale: activeDateLocale(),
+  });
+}
+
+export function formatWorkWeekdayShort(ymd: string): string {
+  if (!ymd) return "";
+  return formatInTimeZone(instantForWorkDateYmd(ymd), APP_TIME_ZONE, "EEE", {
     locale: activeDateLocale(),
   });
 }

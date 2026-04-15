@@ -31,6 +31,7 @@ import {
   deleteWorkRecord,
   getMonthlyStats,
   getYearMonthlyTotals,
+  getTimelineStats,
   getStatsForDateRange,
   getNotificationSettings,
   upsertNotificationSettings,
@@ -571,6 +572,25 @@ export const appRouter = router({
         return getYearMonthlyTotals(ctx.user.id, input.year, input.workerId, input.shopIds);
       }),
 
+    timeline: protectedProcedure
+      .input(
+        z.object({
+          workerId: z.number().optional(),
+          period: z.enum(["week", "month", "year"]),
+          anchorDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          shopIds: z.array(z.number()).optional(),
+        })
+      )
+      .query(({ ctx, input }) => {
+        return getTimelineStats(
+          ctx.user.id,
+          input.period,
+          input.anchorDate,
+          input.workerId,
+          input.shopIds
+        );
+      }),
+
     settlementPeriods: protectedProcedure
       .input(
         z.object({
@@ -640,12 +660,22 @@ export const appRouter = router({
           .object({
             uiLocale: z.enum(USER_PREFERENCE_UI_LOCALES).optional(),
             currencyCode: z.enum(USER_PREFERENCE_CURRENCIES).optional(),
+            defaultWorkerId: z.number().nullable().optional(),
           })
-          .refine((d) => d.uiLocale !== undefined || d.currencyCode !== undefined, {
-            message: "至少需要指定 uiLocale 或 currencyCode 其中一項",
-          })
+          .refine(
+            (d) =>
+              d.uiLocale !== undefined ||
+              d.currencyCode !== undefined ||
+              d.defaultWorkerId !== undefined,
+            {
+              message: "至少需要指定 uiLocale、currencyCode 或 defaultWorkerId 其中一項",
+            }
+          )
       )
-      .mutation(({ ctx, input }) => {
+      .mutation(async ({ ctx, input }) => {
+        if (input.defaultWorkerId != null) {
+          await assertWorkerBelongsToUser(input.defaultWorkerId, ctx.user.id);
+        }
         return updateUserPreferences(ctx.user.id, input);
       }),
   }),

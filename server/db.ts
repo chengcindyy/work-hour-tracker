@@ -186,6 +186,16 @@ export async function archiveWorker(userId: number, workerId: number): Promise<v
     .update(workers)
     .set({ isActive: false })
     .where(and(eq(workers.id, workerId), eq(workers.ownerUserId, userId)));
+
+  await db
+    .update(userPreferences)
+    .set({ defaultWorkerId: null, updatedAt: new Date() })
+    .where(
+      and(
+        eq(userPreferences.userId, userId),
+        eq(userPreferences.defaultWorkerId, workerId)
+      )
+    );
 }
 
 export async function assertWorkerBelongsToUser(
@@ -908,6 +918,94 @@ export type YearMonthStat = {
   totalHours: number;
 };
 
+export type TimelinePeriod = "week" | "month" | "year";
+
+export type TimelinePoint = {
+  bucketStart: string;
+  totalEarnings: number | null;
+  totalHours: number | null;
+};
+
+export type TimelineStats = {
+  period: TimelinePeriod;
+  startDate: string;
+  endDate: string;
+  points: TimelinePoint[];
+};
+
+function pad2(n: number): string {
+  return n.toString().padStart(2, "0");
+}
+
+function parseYmdParts(ymd: string): { year: number; month: number; day: number } {
+  const [year, month, day] = ymd.split("-").map((part) => parseInt(part, 10));
+  return { year, month, day };
+}
+
+function ymdToUtcDate(ymd: string): Date {
+  const { year, month, day } = parseYmdParts(ymd);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function utcDateToYmd(date: Date): string {
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+}
+
+function addDaysToYmd(ymd: string, deltaDays: number): string {
+  const date = ymdToUtcDate(ymd);
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  return utcDateToYmd(date);
+}
+
+function monthStartForYmd(ymd: string): string {
+  const { year, month } = parseYmdParts(ymd);
+  return `${year}-${pad2(month)}-01`;
+}
+
+function monthEndForYmd(ymd: string): string {
+  const { year, month } = parseYmdParts(ymd);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${year}-${pad2(month)}-${pad2(lastDay)}`;
+}
+
+function weekStartForYmd(ymd: string): string {
+  const weekday = ymdToUtcDate(ymd).getUTCDay();
+  return addDaysToYmd(ymd, -weekday);
+}
+
+function getTodayYmdInVancouver(): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Vancouver",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
+  const month = parts.find((part) => part.type === "month")?.value ?? "01";
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
+  return `${year}-${month}-${day}`;
+}
+
+function getRecordHoursAndEarnings(record: WorkRecordWithLineItems): { hours: number; earnings: number } | null {
+  let hours = 0;
+  if (record.lineItems && record.lineItems.length > 0) {
+    hours = record.lineItems.reduce((sum, li) => sum + li.hours, 0);
+  } else if (record.hours != null) {
+    hours = parseFloat(record.hours as any);
+  }
+
+  const earnings = parseFloat(record.totalEarnings as any);
+  if (Number.isNaN(earnings)) {
+    return null;
+  }
+
+  return {
+    hours: Number.isNaN(hours) ? 0 : hours,
+    earnings,
+  };
+}
+
 export async function getYearMonthlyTotals(
   userId: number,
   year: number,
@@ -956,6 +1054,86 @@ export async function getYearMonthlyTotals(
   return buckets;
 }
 
+export async function getTimelineStats(
+  userId: number,
+  period: TimelinePeriod,
+  anchorDateYmd: string,
+  workerId?: number,
+  shopIds?: number[]
+): Promise<TimelineStats> {
+  let startDate = "";
+  let endDate = "";
+  let bucketStarts: string[] = [];
+
+  if (period === "week") {
+    startDate = weekStartForYmd(anchorDateYmd);
+    endDate = addDaysToYmd(startDate, 6);
+    bucketStarts = Array.from({ length: 7 }, (_, index) => addDaysToYmd(startDate, index));
+  } else if (period === "month") {
+    startDate = monthStartForYmd(anchorDateYmd);
+    endDate = monthEndForYmd(anchorDateYmd);
+    const totalDays = Math.floor(
+      (ymdToUtcDate(endDate).getTime() - ymdToUtcDate(startDate).getTime()) / 86400000
+    ) + 1;
+    bucketStarts = Array.from({ length: totalDays }, (_, index) => addDaysToYmd(startDate, index));
+  } else {
+    const { year } = parseYmdParts(anchorDateYmd);
+    startDate = `${year}-01-01`;
+    endDate = `${year}-12-31`;
+    bucketStarts = Array.from({ length: 12 }, (_, index) => `${year}-${pad2(index + 1)}-01`);
+  }
+
+  const records = (await getUserWorkRecords(
+    userId,
+    workerId,
+    startDate,
+    endDate
+  )) as WorkRecordWithLineItems[];
+
+  const shopIdsSet = shopIds != null && shopIds.length > 0 ? new Set(shopIds) : null;
+  const totalsByBucket = new Map<string, { earnings: number; hours: number }>();
+
+  for (const record of records) {
+    if (shopIdsSet != null && !shopIdsSet.has(record.shopId)) {
+      continue;
+    }
+
+    const metrics = getRecordHoursAndEarnings(record);
+    if (!metrics) {
+      continue;
+    }
+
+    const bucketKey =
+      period === "year"
+        ? monthStartForYmd(record.workDate as string)
+        : (record.workDate as string);
+    const existing = totalsByBucket.get(bucketKey) ?? { earnings: 0, hours: 0 };
+    existing.earnings += metrics.earnings;
+    existing.hours += metrics.hours;
+    totalsByBucket.set(bucketKey, existing);
+  }
+
+  const todayYmd = getTodayYmdInVancouver();
+  const todayMonthStart = monthStartForYmd(todayYmd);
+  const points = bucketStarts.map((bucketStart) => {
+    const isFuture = period === "year" ? bucketStart > todayMonthStart : bucketStart > todayYmd;
+    const totals = totalsByBucket.get(bucketStart);
+
+    return {
+      bucketStart,
+      totalEarnings: isFuture ? null : totals?.earnings ?? 0,
+      totalHours: isFuture ? null : totals?.hours ?? 0,
+    };
+  });
+
+  return {
+    period,
+    startDate,
+    endDate,
+    points,
+  };
+}
+
 export async function getStatsForDateRange(
   userId: number,
   startDateYmd: string,
@@ -1000,6 +1178,7 @@ function parseStoredCurrency(raw: string): UserPreferenceCurrency {
 export type ResolvedUserPreferences = {
   uiLocale: UserPreferenceUiLocale;
   currencyCode: UserPreferenceCurrency;
+  defaultWorkerId: number | null;
 };
 
 export async function getUserPreferencesForUser(
@@ -1010,6 +1189,7 @@ export async function getUserPreferencesForUser(
     return {
       uiLocale: DEFAULT_USER_PREFERENCE_UI_LOCALE,
       currencyCode: DEFAULT_USER_PREFERENCE_CURRENCY,
+      defaultWorkerId: null,
     };
   }
 
@@ -1023,18 +1203,24 @@ export async function getUserPreferencesForUser(
     return {
       uiLocale: DEFAULT_USER_PREFERENCE_UI_LOCALE,
       currencyCode: DEFAULT_USER_PREFERENCE_CURRENCY,
+      defaultWorkerId: null,
     };
   }
 
   return {
     uiLocale: parseStoredUiLocale(result[0].uiLocale),
     currencyCode: parseStoredCurrency(result[0].currencyCode),
+    defaultWorkerId: result[0].defaultWorkerId ?? null,
   };
 }
 
 export async function updateUserPreferences(
   userId: number,
-  patch: { uiLocale?: UserPreferenceUiLocale; currencyCode?: UserPreferenceCurrency }
+  patch: {
+    uiLocale?: UserPreferenceUiLocale;
+    currencyCode?: UserPreferenceCurrency;
+    defaultWorkerId?: number | null;
+  }
 ): Promise<ResolvedUserPreferences> {
   const db = await getDb();
   if (!db) {
@@ -1045,6 +1231,10 @@ export async function updateUserPreferences(
   const next: ResolvedUserPreferences = {
     uiLocale: patch.uiLocale ?? current.uiLocale,
     currencyCode: patch.currencyCode ?? current.currencyCode,
+    defaultWorkerId:
+      patch.defaultWorkerId !== undefined
+        ? patch.defaultWorkerId
+        : current.defaultWorkerId,
   };
 
   const existing = await db
@@ -1059,6 +1249,7 @@ export async function updateUserPreferences(
       .set({
         uiLocale: next.uiLocale,
         currencyCode: next.currencyCode,
+        defaultWorkerId: next.defaultWorkerId,
         updatedAt: new Date(),
       })
       .where(eq(userPreferences.userId, userId));
@@ -1067,6 +1258,7 @@ export async function updateUserPreferences(
       userId,
       uiLocale: next.uiLocale,
       currencyCode: next.currencyCode,
+      defaultWorkerId: next.defaultWorkerId,
     });
   }
 
